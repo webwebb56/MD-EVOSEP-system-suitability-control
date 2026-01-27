@@ -424,8 +424,17 @@ impl TrayApp {
     fn run_doctor(&self) -> Result<()> {
         // Open a command prompt and run mdqc doctor
         let exe_path = std::env::current_exe()?;
+        // Use cmd /c start to open a new console window that stays open
         std::process::Command::new("cmd")
-            .args(["/k", exe_path.to_str().unwrap_or("mdqc"), "doctor"])
+            .args([
+                "/c",
+                "start",
+                "MD QC Diagnostics",
+                "cmd",
+                "/k",
+                exe_path.to_str().unwrap_or("mdqc"),
+                "doctor",
+            ])
             .spawn()?;
         Ok(())
     }

@@ -21,11 +21,15 @@ mod error;
 mod types;
 mod tray;
 mod gui;
+mod crash;
 
 use cli::{Cli, Command};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Install crash handler first thing
+    crash::install_panic_hook();
+
     let cli = Cli::parse();
 
     // Initialize logging based on command
