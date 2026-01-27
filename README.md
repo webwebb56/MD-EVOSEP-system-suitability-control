@@ -46,19 +46,30 @@ Monitor your instrument performance over time by automatically tracking key metr
 
 ### 2. Install the QC Agent
 
-Download the latest release and run:
+Download `mdqc-setup-vX.X.X.exe` from the [latest release](https://github.com/webwebb56/MD-EVOSEP-system-suitability-control/releases/latest) and run it.
+
+The installer will:
+- Install MD QC Agent to Program Files
+- Create configuration directories
+- Add a system tray icon (look for the MD logo)
+- Optionally start automatically when Windows boots
+
+After installation, the MD QC Agent icon will appear in your system tray. Right-click it to access settings and diagnostics.
 
 ```powershell
-# Standard install
-.\mdqc-setup.exe
-
-# Or silent install
-.\mdqc-setup.exe /S
+# For silent/unattended install:
+.\mdqc-setup-vX.X.X.exe /VERYSILENT
 ```
 
 ### 3. Configure Your Instrument
 
-Edit the configuration file at `C:\ProgramData\MassDynamics\QC\config.toml`:
+**Option A: Use the system tray** (recommended)
+- Right-click the MD icon in the system tray
+- Click "Edit Configuration..."
+- Edit the config file that opens in Notepad
+
+**Option B: Edit directly**
+- Open `C:\ProgramData\MassDynamics\QC\config.toml`
 
 ```toml
 # Add your instrument
@@ -89,8 +100,17 @@ You should see all green checkmarks. If not, see [Troubleshooting](#troubleshoot
 
 ### 6. Start Monitoring
 
-The agent runs automatically as a Windows service. To check status:
+The agent runs automatically from the system tray. Look for the MD logo icon.
 
+**System tray menu options:**
+- View current status
+- Edit configuration
+- Open Skyline template
+- Open watch folder
+- View logs
+- Run diagnostics
+
+To check status from command line:
 ```powershell
 mdqc status
 ```

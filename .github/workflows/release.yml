@@ -47,12 +47,41 @@ jobs:
       - name: Get version
         id: version
         shell: bash
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "version_number=${VERSION}" >> $GITHUB_OUTPUT
 
-      - name: Rename binary
+      - name: Update version in installer script
         shell: pwsh
         run: |
+          $content = Get-Content installer/mdqc.iss -Raw
+          $content = $content -replace '#define MyAppVersion ".*"', '#define MyAppVersion "${{ steps.version.outputs.version_number }}"'
+          Set-Content installer/mdqc.iss $content
+
+      - name: Build installer with Inno Setup
+        shell: pwsh
+        run: |
+          # Download and install Inno Setup
+          $url = "https://jrsoftware.org/download.php/is.exe"
+          $installer = "$env:TEMP\innosetup.exe"
+          Invoke-WebRequest -Uri $url -OutFile $installer
+          Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP-" -Wait
+
+          # Create output directory
+          New-Item -ItemType Directory -Force -Path target/installer
+
+          # Build the installer
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/mdqc.iss
+
+      - name: Rename artifacts
+        shell: pwsh
+        run: |
+          # Rename standalone exe
           Copy-Item "target/release/mdqc.exe" "mdqc-${{ steps.version.outputs.version }}-windows-x64.exe"
+
+          # Rename installer (it's already named with version from the script)
+          Copy-Item "target/installer/mdqc-setup-${{ steps.version.outputs.version_number }}.exe" "mdqc-setup-${{ steps.version.outputs.version }}.exe"
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -61,17 +90,25 @@ jobs:
           draft: false
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
           generate_release_notes: true
+          body: |
+            ## Installation
+
+            **Recommended:** Download `mdqc-setup-${{ steps.version.outputs.version }}.exe` and run the installer.
+
+            The installer will:
+            - Install MD QC Agent to Program Files
+            - Create configuration directories
+            - Add Start Menu shortcuts
+            - Optionally start on Windows boot
+            - Launch the system tray icon
+
+            **Manual install:** Download `mdqc-${{ steps.version.outputs.version }}-windows-x64.exe` if you prefer to set up manually.
+
+            ## Requirements
+            - Windows 10 or later
+            - [Skyline](https://skyline.ms) (for data extraction)
           files: |
+            mdqc-setup-${{ steps.version.outputs.version }}.exe
             mdqc-${{ steps.version.outputs.version }}-windows-x64.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  # Optional: Build MSI installer
-  # installer:
-  #   name: Build MSI Installer
-  #   runs-on: windows-latest
-  #   needs: build
-  #   steps:
-  #     - name: Build MSI with WiX
-  #       run: |
-  #         # WiX installer build steps here

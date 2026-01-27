@@ -1,0 +1,83 @@
+# MD QC Agent Configuration
+# Documentation: https://github.com/webwebb56/MD-EVOSEP-system-suitability-control
+#
+# Edit this file to configure your instruments and Mass Dynamics account.
+# After editing, restart the MD QC Agent from the system tray.
+
+[agent]
+# Unique identifier for this agent (auto-generates from hardware if set to "auto")
+agent_id = "auto"
+
+# Log level: error, warn, info, debug
+log_level = "info"
+
+[cloud]
+# Mass Dynamics API endpoint
+endpoint = "https://qc.massdynamics.com/api/"
+
+# Your API token from Mass Dynamics account
+# Get this from: https://massdynamics.com/account/api-tokens
+api_token = ""
+
+[skyline]
+# Path to SkylineCmd.exe (set to "auto" to detect automatically)
+path = "auto"
+
+# Maximum time (seconds) to wait for Skyline extraction
+timeout_seconds = 300
+
+# Process priority for Skyline (normal, below_normal, idle)
+# Use "below_normal" to avoid interfering with acquisition
+process_priority = "below_normal"
+
+[watcher]
+# Use filesystem events for faster detection (recommended)
+use_filesystem_events = true
+
+# How often to scan for new files (seconds)
+scan_interval_seconds = 30
+
+# Wait for file to stop changing before processing (seconds)
+# Increase this if files are being processed before fully written
+stability_window_seconds = 60
+
+[spool]
+# Maximum size of pending upload queue (MB)
+max_pending_mb = 1000
+
+# How long to keep failed uploads (days)
+max_age_days = 30
+
+
+# =============================================================================
+# INSTRUMENTS
+# =============================================================================
+# Add one [[instruments]] section for each instrument you want to monitor.
+# Remove or comment out the examples below and add your own.
+
+# Example: Thermo instrument
+# [[instruments]]
+# id = "EXPLORIS01"                              # A unique name for this instrument
+# vendor = "thermo"                              # thermo, bruker, sciex, waters, agilent
+# watch_path = "D:\\Data"                        # Where raw files are saved
+# file_pattern = "*.raw"                         # File extension to watch
+# template = "C:\\ProgramData\\MassDynamics\\QC\\templates\\my_template.sky"
+
+# Example: Bruker timsTOF
+# [[instruments]]
+# id = "TIMSTOF01"
+# vendor = "bruker"
+# watch_path = "D:\\Data\\timsTOF"
+# file_pattern = "*.d"
+# template = "C:\\ProgramData\\MassDynamics\\QC\\templates\\tims_template.sky"
+
+# =============================================================================
+# YOUR INSTRUMENTS - Add below this line
+# =============================================================================
+
+[[instruments]]
+id = "MY_INSTRUMENT"
+vendor = "thermo"
+watch_path = "D:\\Data"
+file_pattern = "*.raw"
+template = "C:\\ProgramData\\MassDynamics\\QC\\templates\\qc_template.sky"
