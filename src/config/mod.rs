@@ -137,7 +137,11 @@ pub struct CloudConfig {
     #[serde(default = "default_endpoint")]
     pub endpoint: String,
 
-    /// Certificate thumbprint (from Windows cert store)
+    /// API token for Bearer authentication (alternative to mTLS)
+    /// Can be a Personal Access Token from MD or an API key
+    pub api_token: Option<String>,
+
+    /// Certificate thumbprint (from Windows cert store) for mTLS
     pub certificate_thumbprint: Option<String>,
 
     /// Proxy URL (optional)
@@ -152,6 +156,7 @@ impl Default for CloudConfig {
     fn default() -> Self {
         Self {
             endpoint: default_endpoint(),
+            api_token: None,
             certificate_thumbprint: None,
             proxy: None,
         }

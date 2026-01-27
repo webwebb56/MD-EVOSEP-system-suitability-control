@@ -33,17 +33,25 @@ pub struct Uploader {
     config: CloudConfig,
     client: reqwest::Client,
     spool: Spool,
+    /// Cached API token for Bearer auth
+    api_token: Option<String>,
 }
 
 impl Uploader {
-    /// Create a new uploader with mTLS support.
+    /// Create a new uploader with mTLS or Bearer token support.
     pub fn new(config: &CloudConfig, spool: Spool) -> Result<Self> {
         let client = Self::build_client(config)?;
+        let api_token = config.api_token.clone();
+
+        if api_token.is_some() {
+            info!("Bearer token authentication configured");
+        }
 
         Ok(Self {
             config: config.clone(),
             client,
             spool,
+            api_token,
         })
     }
 
@@ -64,8 +72,8 @@ impl Uploader {
             let identity = Self::load_identity_from_cert_store(thumbprint)?;
             client_builder = client_builder.identity(identity);
             info!(thumbprint = %thumbprint, "mTLS client certificate configured");
-        } else {
-            warn!("No certificate thumbprint configured - uploads will be unauthenticated");
+        } else if config.api_token.is_none() {
+            warn!("No authentication configured (no certificate thumbprint or API token)");
         }
 
         Ok(client_builder.build()?)
@@ -266,12 +274,15 @@ impl Uploader {
             "Uploading payload"
         );
 
-        let response = self
-            .client
-            .post(&url)
-            .json(payload)
-            .send()
-            .await?;
+        // Build request with optional Bearer token
+        let mut request = self.client.post(&url).json(payload);
+
+        if let Some(ref token) = self.api_token {
+            request = request.header("Authorization", format!("Bearer {}", token));
+            debug!("Added Bearer token authentication header");
+        }
+
+        let response = request.send().await?;
 
         let status = response.status();
 
