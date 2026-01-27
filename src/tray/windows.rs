@@ -16,6 +16,12 @@ use winit::window::WindowId;
 use crate::config;
 use crate::extractor::skyline;
 
+/// Mutex name for single instance check
+const SINGLE_INSTANCE_MUTEX: &str = "Global\\MassDynamicsQCAgent";
+
+/// GitHub releases URL for update checks
+const RELEASES_URL: &str = "https://github.com/webwebb56/MD-EVOSEP-system-suitability-control/releases";
+
 /// Menu item IDs
 mod menu_ids {
     pub const STATUS: &str = "status";
@@ -26,6 +32,7 @@ mod menu_ids {
     pub const OPEN_TEMPLATE: &str = "open_template";
     pub const OPEN_DATA_FOLDER: &str = "open_data_folder";
     pub const DOCTOR: &str = "doctor";
+    pub const CHECK_UPDATES: &str = "check_updates";
     pub const EXIT: &str = "exit";
 }
 
@@ -236,6 +243,12 @@ impl TrayApp {
 
         menu.append(&PredefinedMenuItem::separator())?;
 
+        // Check for Updates
+        let updates_item = MenuItem::with_id(menu_ids::CHECK_UPDATES, "Check for Updates...", true, None);
+        menu.append(&updates_item)?;
+
+        menu.append(&PredefinedMenuItem::separator())?;
+
         // Exit
         let exit_item = MenuItem::with_id(menu_ids::EXIT, "Exit", true, None);
         menu.append(&exit_item)?;
@@ -313,6 +326,9 @@ impl TrayApp {
                 if let Err(e) = self.run_doctor() {
                     eprintln!("Failed to run doctor: {}", e);
                 }
+            }
+            menu_ids::CHECK_UPDATES => {
+                open_url(RELEASES_URL);
             }
             menu_ids::EXIT => {
                 self.running.store(false, Ordering::SeqCst);
@@ -432,7 +448,7 @@ impl ApplicationHandler for TrayApp {
             println!("Running startup health check...");
             let health = self.run_health_check();
 
-            // Print health check results to console
+            // Print health check results to console and show message box for errors
             if health.is_healthy {
                 if health.warnings.is_empty() {
                     println!("Health check: PASSED");
@@ -450,6 +466,13 @@ impl ApplicationHandler for TrayApp {
                 for warn in &health.warnings {
                     println!("  Warning: {}", warn);
                 }
+
+                // Show message box for critical errors
+                let error_msg = format!(
+                    "MD QC Agent detected configuration issues:\n\n{}\n\nRight-click the tray icon and select 'Edit Configuration...' to fix.",
+                    health.errors.join("\n")
+                );
+                show_message_box("MD QC Agent - Setup Required", &error_msg, true);
             }
 
             let menu = match self.create_menu() {
@@ -556,8 +579,166 @@ fn find_skyline() -> Option<std::path::PathBuf> {
     None
 }
 
+/// Show a Windows message box
+fn show_message_box(title: &str, message: &str, is_error: bool) {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null_mut;
+
+    // Convert strings to wide strings for Windows API
+    let title_wide: Vec<u16> = OsStr::new(title).encode_wide().chain(Some(0)).collect();
+    let message_wide: Vec<u16> = OsStr::new(message).encode_wide().chain(Some(0)).collect();
+
+    // MB_OK = 0, MB_ICONERROR = 0x10, MB_ICONINFORMATION = 0x40
+    let flags: u32 = if is_error { 0x10 } else { 0x40 };
+
+    unsafe {
+        windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW(
+            null_mut(),
+            message_wide.as_ptr(),
+            title_wide.as_ptr(),
+            flags,
+        );
+    }
+}
+
+/// Check if another instance is already running
+fn check_single_instance() -> Option<SingleInstanceGuard> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null_mut;
+
+    let mutex_name: Vec<u16> = OsStr::new(SINGLE_INSTANCE_MUTEX)
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+
+    unsafe {
+        let handle = windows_sys::Win32::System::Threading::CreateMutexW(
+            null_mut(),
+            1, // bInitialOwner = TRUE
+            mutex_name.as_ptr(),
+        );
+
+        if handle.is_null() {
+            return None;
+        }
+
+        let last_error = windows_sys::Win32::Foundation::GetLastError();
+
+        // ERROR_ALREADY_EXISTS = 183
+        if last_error == 183 {
+            // Another instance is running
+            windows_sys::Win32::Foundation::CloseHandle(handle);
+            return None;
+        }
+
+        Some(SingleInstanceGuard { handle })
+    }
+}
+
+/// Guard that releases the mutex when dropped
+struct SingleInstanceGuard {
+    handle: windows_sys::Win32::Foundation::HANDLE,
+}
+
+impl Drop for SingleInstanceGuard {
+    fn drop(&mut self) {
+        unsafe {
+            windows_sys::Win32::Foundation::CloseHandle(self.handle);
+        }
+    }
+}
+
+/// Create default config file if it doesn't exist
+fn ensure_config_exists() -> bool {
+    let config_path = config::paths::config_file();
+
+    if config_path.exists() {
+        return true;
+    }
+
+    // Create parent directory
+    if let Some(parent) = config_path.parent() {
+        if let Err(e) = std::fs::create_dir_all(parent) {
+            eprintln!("Failed to create config directory: {}", e);
+            return false;
+        }
+    }
+
+    // Default config template
+    let default_config = r#"# MD QC Agent Configuration
+# Edit this file to configure your instruments.
+# After editing, the changes will take effect on next restart.
+
+[agent]
+agent_id = "auto"
+log_level = "info"
+
+[cloud]
+endpoint = "https://qc.massdynamics.com/api/"
+# Get your API token from Mass Dynamics account settings
+api_token = ""
+
+[skyline]
+path = "auto"
+timeout_seconds = 300
+
+[watcher]
+scan_interval_seconds = 30
+stability_window_seconds = 60
+
+# Configure your instrument(s) below:
+# Uncomment and edit the following section:
+
+# [[instruments]]
+# id = "MY_INSTRUMENT"
+# vendor = "thermo"           # thermo, bruker, sciex, waters, or agilent
+# watch_path = "D:\\Data"     # Folder where raw files are saved
+# file_pattern = "*.raw"      # File pattern to watch
+# template = "C:\\ProgramData\\MassDynamics\\QC\\templates\\my_template.sky"
+"#;
+
+    match std::fs::write(&config_path, default_config) {
+        Ok(_) => {
+            println!("Created default config at: {}", config_path.display());
+            true
+        }
+        Err(e) => {
+            eprintln!("Failed to create default config: {}", e);
+            false
+        }
+    }
+}
+
+/// Open URL in default browser
+fn open_url(url: &str) {
+    let _ = std::process::Command::new("cmd")
+        .args(["/c", "start", "", url])
+        .spawn();
+}
+
 /// Run the system tray application
 pub async fn run_tray() -> Result<()> {
+    // Check for single instance
+    let _guard = match check_single_instance() {
+        Some(guard) => guard,
+        None => {
+            show_message_box(
+                "MD QC Agent",
+                "MD QC Agent is already running.\n\nLook for the icon in your system tray.",
+                false,
+            );
+            return Ok(());
+        }
+    };
+
+    // Ensure config exists (create default if needed)
+    ensure_config_exists();
+
+    // Ensure directories exist
+    let _ = config::paths::ensure_directories();
+
     println!("Starting MD QC Agent system tray...");
     println!("Right-click the tray icon for options.");
 
