@@ -2,7 +2,7 @@
 ; https://jrsoftware.org/isinfo.php
 
 #define MyAppName "MD QC Agent"
-#define MyAppVersion "0.4.2"
+#define MyAppVersion "0.4.3"
 #define MyAppPublisher "Mass Dynamics"
 #define MyAppURL "https://massdynamics.com"
 #define MyAppExeName "mdqc.exe"
@@ -88,13 +88,25 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "cmd.exe"; Parameters: "/c if not exist ""{commonappdata}\MassDynamics\QC\config.toml"" copy ""{app}\config.template.toml"" ""{commonappdata}\MassDynamics\QC\config.toml"""; Flags: runhidden
 
 ; Launch tray after install
-Filename: "{app}\{#MyAppExeName}"; Parameters: "tray"; Description: "Launch MD QC Agent"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyAppExeName}"; Parameters: "tray"; Description: "Launch MD QC Agent"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
 ; Stop any running instance before uninstall
 Filename: "taskkill.exe"; Parameters: "/F /IM {#MyAppExeName}"; Flags: runhidden; RunOnceId: "KillApp"
 
 [Code]
+// Kill any running instance before installing
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  // Try to kill any running mdqc.exe process
+  Exec('taskkill.exe', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Small delay to ensure process is fully stopped and file handles released
+  Sleep(500);
+  Result := '';
+end;
+
 // Check if Skyline is installed and show a message if not
 procedure CurPageChanged(CurPageID: Integer);
 var
