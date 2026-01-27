@@ -767,6 +767,21 @@ fn open_url(url: &str) {
 
 /// Run the system tray application
 pub async fn run_tray() -> Result<()> {
+    // Wrap in inner function to catch errors and show message box
+    match run_tray_inner().await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            show_message_box(
+                "MD QC Agent - Startup Error",
+                &format!("Failed to start MD QC Agent:\n\n{}\n\nPlease check the logs or run 'mdqc doctor' for diagnostics.", e),
+                true,
+            );
+            Err(e)
+        }
+    }
+}
+
+async fn run_tray_inner() -> Result<()> {
     // Check for single instance
     let _guard = match check_single_instance() {
         Some(guard) => guard,
