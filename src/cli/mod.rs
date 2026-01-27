@@ -80,6 +80,9 @@ pub enum Command {
         action: ConfigAction,
     },
 
+    /// Run system tray icon (Windows only)
+    Tray,
+
     /// Show version information
     Version,
 }
