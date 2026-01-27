@@ -93,7 +93,7 @@ fn run_service(_arguments: Vec<OsString>) -> anyhow::Result<()> {
                 process_id: None,
             })?;
 
-            return Err(e.into());
+            return Err(e);
         }
     };
 
@@ -111,9 +111,7 @@ fn run_service(_arguments: Vec<OsString>) -> anyhow::Result<()> {
     info!("Service started");
 
     // Run the agent
-    let result = runtime.block_on(async {
-        run_agent(config, &mut shutdown_rx).await
-    });
+    let result = runtime.block_on(async { run_agent(config, &mut shutdown_rx).await });
 
     // Report that we're stopping
     status_handle.set_service_status(ServiceStatus {

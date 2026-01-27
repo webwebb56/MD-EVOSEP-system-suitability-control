@@ -20,11 +20,11 @@ use crate::types::QcPayload;
 /// Attempt 4: 10m ± 2m
 /// Attempt 5: 1h ± 10m
 const RETRY_DELAYS_SECS: [(u64, u64); 5] = [
-    (0, 0),        // Attempt 1: immediate
-    (20, 40),      // Attempt 2: 30s ± 10s
-    (90, 150),     // Attempt 3: 2m ± 30s
-    (480, 720),    // Attempt 4: 10m ± 2m
-    (3000, 4200),  // Attempt 5: 1h ± 10m
+    (0, 0),       // Attempt 1: immediate
+    (20, 40),     // Attempt 2: 30s ± 10s
+    (90, 150),    // Attempt 3: 2m ± 30s
+    (480, 720),   // Attempt 4: 10m ± 2m
+    (3000, 4200), // Attempt 5: 1h ± 10m
 ];
 
 /// Uploader for sending payloads to the cloud.
@@ -195,21 +195,23 @@ impl Uploader {
     /// Upload a single payload with exactly 5 retry attempts per spec.
     async fn upload_with_retry(&self, path: &PathBuf) -> Result<(), UploadError> {
         // Move to uploading
-        let uploading_path = self.spool.mark_uploading(path)
+        let uploading_path = self
+            .spool
+            .mark_uploading(path)
             .map_err(|e| UploadError::Server {
                 status: 0,
                 message: e.to_string(),
             })?;
 
         // Read payload
-        let content = std::fs::read_to_string(&uploading_path)
-            .map_err(|e| UploadError::Server {
+        let content =
+            std::fs::read_to_string(&uploading_path).map_err(|e| UploadError::Server {
                 status: 0,
                 message: e.to_string(),
             })?;
 
-        let payload: QcPayload = serde_json::from_str(&content)
-            .map_err(|e| UploadError::Server {
+        let payload: QcPayload =
+            serde_json::from_str(&content).map_err(|e| UploadError::Server {
                 status: 0,
                 message: e.to_string(),
             })?;
@@ -239,11 +241,12 @@ impl Uploader {
 
             match self.upload_payload(&payload).await {
                 Ok(()) => {
-                    self.spool.mark_completed(&uploading_path)
-                        .map_err(|e| UploadError::Server {
+                    self.spool.mark_completed(&uploading_path).map_err(|e| {
+                        UploadError::Server {
                             status: 0,
                             message: e.to_string(),
-                        })?;
+                        }
+                    })?;
                     return Ok(());
                 }
                 Err(e) => {

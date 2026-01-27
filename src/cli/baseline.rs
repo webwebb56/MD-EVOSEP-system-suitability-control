@@ -11,9 +11,10 @@ pub async fn run(action: BaselineAction) -> Result<()> {
     match action {
         BaselineAction::List { instrument } => list_baselines(instrument).await,
         BaselineAction::Show { baseline_id } => show_baseline(&baseline_id).await,
-        BaselineAction::Reset { instrument, confirm } => {
-            reset_baseline(&instrument, confirm).await
-        }
+        BaselineAction::Reset {
+            instrument,
+            confirm,
+        } => reset_baseline(&instrument, confirm).await,
     }
 }
 
@@ -52,7 +53,10 @@ async fn list_baselines(instrument_filter: Option<String>) -> Result<()> {
 
         // TODO: Query cloud for baselines
         // For now, show placeholder
-        println!("[ACTIVE]   base_example  2026-01-15  {}", instrument.template);
+        println!(
+            "[ACTIVE]   base_example  2026-01-15  {}",
+            instrument.template
+        );
         println!("           (baseline data would come from cloud)");
         println!();
     }
@@ -86,17 +90,17 @@ async fn reset_baseline(instrument: &str, confirm: bool) -> Result<()> {
     let config = Config::load()?;
 
     // Verify instrument exists
-    let inst = config
-        .instruments
-        .iter()
-        .find(|i| i.id == instrument);
+    let inst = config.instruments.iter().find(|i| i.id == instrument);
 
     if inst.is_none() {
         anyhow::bail!("Instrument '{}' not found in configuration", instrument);
     }
 
     println!();
-    println!("WARNING: This will archive the current baseline for '{}'.", instrument);
+    println!(
+        "WARNING: This will archive the current baseline for '{}'.",
+        instrument
+    );
     println!("A new SSC0 run will be required to establish a new baseline.");
     println!();
 

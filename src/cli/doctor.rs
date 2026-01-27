@@ -92,7 +92,11 @@ impl CheckResult {
 /// Run the doctor command.
 pub async fn run() -> Result<()> {
     println!();
-    println!("{}MD Local QC Agent - System Health Check{}", color::BOLD, color::RESET);
+    println!(
+        "{}MD Local QC Agent - System Health Check{}",
+        color::BOLD,
+        color::RESET
+    );
     println!("{}", "=".repeat(45));
     println!();
 
@@ -261,11 +265,7 @@ fn check_skyline(config: Option<&Config>) -> Vec<CheckResult> {
 
     // Find Skyline
     let skyline_path = if let Some(config) = config {
-        config
-            .skyline
-            .path
-            .as_ref()
-            .map(|p| std::path::PathBuf::from(p))
+        config.skyline.path.as_ref().map(std::path::PathBuf::from)
     } else {
         None
     };
@@ -316,10 +316,7 @@ fn check_vendor_readers(_config: Option<&Config>) -> Vec<CheckResult> {
     if skyline::check_thermo_reader() {
         results.push(CheckResult::ok("Thermo RawFileReader"));
     } else {
-        results.push(CheckResult::warning(
-            "Thermo RawFileReader",
-            "not detected",
-        ));
+        results.push(CheckResult::warning("Thermo RawFileReader", "not detected"));
     }
 
     // Check Bruker reader
@@ -496,7 +493,7 @@ async fn check_cloud_connectivity(config: Option<&Config>) -> Vec<CheckResult> {
     results
 }
 
-fn check_spool(config: &Config) -> Vec<CheckResult> {
+fn check_spool(_config: &Config) -> Vec<CheckResult> {
     let mut results = Vec::new();
 
     let spool_dir = config::paths::spool_dir();
@@ -520,10 +517,7 @@ fn check_spool(config: &Config) -> Vec<CheckResult> {
         // Try to create it
         match std::fs::create_dir_all(&spool_dir) {
             Ok(_) => {
-                results.push(CheckResult::ok_with_detail(
-                    "Spool directory",
-                    "created",
-                ));
+                results.push(CheckResult::ok_with_detail("Spool directory", "created"));
             }
             Err(e) => {
                 results.push(CheckResult::error(

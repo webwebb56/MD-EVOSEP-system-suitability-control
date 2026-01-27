@@ -3,6 +3,8 @@
 //! Tracks files through the finalization process:
 //! DETECTED → STABILIZING → READY → PROCESSING → DONE
 
+#![allow(dead_code)]
+
 use crate::types::FinalizationState;
 
 /// Finalizer tracks a single file through the finalization process.

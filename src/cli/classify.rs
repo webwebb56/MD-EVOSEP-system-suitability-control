@@ -110,7 +110,7 @@ pub async fn run(path: &str) -> Result<()> {
 
             // Extract filename and try to parse
             if let Some(filename) = path.file_name().and_then(|f| f.to_str()) {
-                let parts: Vec<&str> = filename.split(|c| c == '_' || c == '-').collect();
+                let parts: Vec<&str> = filename.split(['_', '-']).collect();
 
                 println!("Filename parts: {:?}", parts);
 

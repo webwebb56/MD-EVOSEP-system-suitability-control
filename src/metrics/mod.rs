@@ -2,6 +2,8 @@
 //!
 //! Helper functions for computing QC metrics from raw data.
 
+#![allow(dead_code)]
+
 use crate::types::TargetMetrics;
 
 /// Calculate a chromatography quality score from target metrics.
@@ -24,10 +26,7 @@ pub fn calculate_chromatography_score(targets: &[TargetMetrics]) -> f64 {
     scores.push(detection_score);
 
     // Peak width consistency (0-1)
-    let fwhm_values: Vec<f64> = targets
-        .iter()
-        .filter_map(|t| t.peak_width_fwhm)
-        .collect();
+    let fwhm_values: Vec<f64> = targets.iter().filter_map(|t| t.peak_width_fwhm).collect();
 
     if fwhm_values.len() >= 2 {
         let mean_fwhm = fwhm_values.iter().sum::<f64>() / fwhm_values.len() as f64;
@@ -42,20 +41,17 @@ pub fn calculate_chromatography_score(targets: &[TargetMetrics]) -> f64 {
             1.0
         };
         // CV of 0 -> score 1, CV of 1 -> score 0
-        let width_score = (1.0 - cv).max(0.0).min(1.0);
+        let width_score = (1.0 - cv).clamp(0.0, 1.0);
         scores.push(width_score);
     }
 
     // Peak symmetry component (0-1)
-    let symmetry_values: Vec<f64> = targets
-        .iter()
-        .filter_map(|t| t.peak_symmetry)
-        .collect();
+    let symmetry_values: Vec<f64> = targets.iter().filter_map(|t| t.peak_symmetry).collect();
 
     if !symmetry_values.is_empty() {
         // Ideal symmetry is 1.0; score decreases as symmetry deviates
         let mean_symmetry = symmetry_values.iter().sum::<f64>() / symmetry_values.len() as f64;
-        let symmetry_score = (1.0 - (mean_symmetry - 1.0).abs()).max(0.0).min(1.0);
+        let symmetry_score = (1.0 - (mean_symmetry - 1.0).abs()).clamp(0.0, 1.0);
         scores.push(symmetry_score);
     }
 
@@ -69,7 +65,7 @@ pub fn calculate_chromatography_score(targets: &[TargetMetrics]) -> f64 {
     if !mass_errors.is_empty() {
         let mean_error = mass_errors.iter().sum::<f64>() / mass_errors.len() as f64;
         // 0 ppm -> score 1, 10 ppm -> score 0
-        let mass_score = (1.0 - mean_error / 10.0).max(0.0).min(1.0);
+        let mass_score = (1.0 - mean_error / 10.0).clamp(0.0, 1.0);
         scores.push(mass_score);
     }
 
@@ -85,7 +81,7 @@ pub fn calculate_chromatography_score(targets: &[TargetMetrics]) -> f64 {
 pub fn identify_outliers(
     targets: &[TargetMetrics],
     rt_threshold_minutes: f64,
-    area_fold_change_threshold: f64,
+    _area_fold_change_threshold: f64,
 ) -> Vec<String> {
     let mut outliers = Vec::new();
 
@@ -135,17 +131,13 @@ impl MetricSummary {
         let sum: f64 = values.iter().sum();
         let mean = sum / count as f64;
 
-        let variance = values
-            .iter()
-            .map(|v| (v - mean).powi(2))
-            .sum::<f64>()
-            / count as f64;
+        let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / count as f64;
         let std_dev = variance.sqrt();
 
         let min = values[0];
         let max = values[count - 1];
 
-        let median = if count % 2 == 0 {
+        let median = if count.is_multiple_of(2) {
             (values[count / 2 - 1] + values[count / 2]) / 2.0
         } else {
             values[count / 2]

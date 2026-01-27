@@ -9,7 +9,9 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
-use notify::{Config as NotifyConfig, Event, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher};
+use notify::{
+    Config as NotifyConfig, Event, RecommendedWatcher, RecursiveMode, Watcher as NotifyWatcher,
+};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -102,10 +104,7 @@ impl Watcher {
         let watch_path = PathBuf::from(&self.instrument.watch_path);
 
         if !watch_path.exists() {
-            anyhow::bail!(
-                "Watch path does not exist: {}",
-                watch_path.display()
-            );
+            anyhow::bail!("Watch path does not exist: {}", watch_path.display());
         }
 
         info!(
@@ -150,14 +149,7 @@ impl Watcher {
         let running = Arc::clone(&self.running);
 
         tokio::spawn(async move {
-            run_finalization_loop(
-                tracked_files,
-                ready_tx,
-                config,
-                instrument_id,
-                running,
-            )
-            .await
+            run_finalization_loop(tracked_files, ready_tx, config, instrument_id, running).await
         });
 
         // Start the scan loop (always runs as fallback/supplement)
@@ -282,7 +274,10 @@ fn run_event_watcher(
                             "File detected via filesystem event"
                         );
 
-                        tracked_files_clone.lock().unwrap().insert(path, tracked_file);
+                        tracked_files_clone
+                            .lock()
+                            .unwrap()
+                            .insert(path, tracked_file);
                     }
                 }
                 Err(e) => {
@@ -323,9 +318,7 @@ async fn run_scan_loop(
     instrument_id: String,
     running: Arc<Mutex<bool>>,
 ) {
-    let mut interval = tokio::time::interval(
-        tokio::time::Duration::from_secs(scan_interval_secs)
-    );
+    let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(scan_interval_secs));
 
     loop {
         interval.tick().await;
@@ -466,16 +459,14 @@ async fn run_finalization_loop(
                             check_file_state(path, file.vendor);
 
                         // Check if stable
-                        if current_size == file.last_size
-                            && current_modified == file.last_modified
+                        if current_size == file.last_size && current_modified == file.last_modified
                         {
                             // Still stable
                             if file.stable_since.is_none() {
                                 file.stable_since = Some(Utc::now());
                             }
 
-                            let stable_duration =
-                                Utc::now() - file.stable_since.unwrap();
+                            let stable_duration = Utc::now() - file.stable_since.unwrap();
 
                             if stable_duration >= stability_window && is_complete {
                                 file.state = FinalizationState::Ready;
@@ -736,8 +727,7 @@ fn is_valid_raw_file(path: &Path, vendor: Vendor) -> bool {
         Vendor::Thermo => extension.as_deref() == Some("raw") && path.is_file(),
         Vendor::Bruker => extension.as_deref() == Some("d") && path.is_dir(),
         Vendor::Sciex => {
-            matches!(extension.as_deref(), Some("wiff") | Some("wiff2"))
-                && path.is_file()
+            matches!(extension.as_deref(), Some("wiff") | Some("wiff2")) && path.is_file()
         }
         Vendor::Waters => extension.as_deref() == Some("raw") && path.is_dir(),
         Vendor::Agilent => extension.as_deref() == Some("d") && path.is_dir(),

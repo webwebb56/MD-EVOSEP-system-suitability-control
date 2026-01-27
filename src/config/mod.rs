@@ -65,8 +65,7 @@ impl Config {
 
     /// Save configuration to the file it was loaded from.
     pub fn save(&self) -> Result<()> {
-        let content = toml::to_string_pretty(self)
-            .context("Failed to serialize configuration")?;
+        let content = toml::to_string_pretty(self).context("Failed to serialize configuration")?;
         std::fs::write(&self.path, content)
             .with_context(|| format!("Failed to write config file: {}", self.path.display()))?;
         Ok(())

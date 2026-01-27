@@ -3,15 +3,15 @@
 use anyhow::Result;
 use tokio::signal;
 use tokio::sync::mpsc;
-use tracing::{info, error, warn};
+use tracing::{error, info, warn};
 
-use crate::config::Config;
-use crate::watcher::Watcher;
 use crate::classifier::Classifier;
+use crate::config::Config;
 use crate::extractor::Extractor;
 use crate::spool::Spool;
-use crate::uploader::Uploader;
 use crate::types::TrackedFile;
+use crate::uploader::Uploader;
+use crate::watcher::Watcher;
 
 /// Run the agent in foreground mode.
 pub async fn run_foreground() -> Result<()> {
@@ -47,8 +47,8 @@ fn generate_agent_id() -> String {
         use winreg::enums::*;
         use winreg::RegKey;
 
-        if let Ok(hklm) = RegKey::predef(HKEY_LOCAL_MACHINE)
-            .open_subkey(r"SOFTWARE\Microsoft\Cryptography")
+        if let Ok(hklm) =
+            RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey(r"SOFTWARE\Microsoft\Cryptography")
         {
             if let Ok(guid) = hklm.get_value::<String, _>("MachineGuid") {
                 return format!("mdqc-{}", &guid[..8]);
@@ -94,11 +94,7 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
     // Start watcher for each instrument
     let mut watchers = Vec::new();
     for instrument in &config.instruments {
-        let watcher = Watcher::new(
-            instrument.clone(),
-            config.watcher.clone(),
-            file_tx.clone(),
-        )?;
+        let watcher = Watcher::new(instrument.clone(), config.watcher.clone(), file_tx.clone())?;
         watchers.push(watcher);
     }
 
@@ -110,9 +106,7 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
     // Start uploader background task
     let uploader_handle = tokio::spawn({
         let uploader = uploader.clone();
-        async move {
-            uploader.run().await
-        }
+        async move { uploader.run().await }
     });
 
     info!(
@@ -148,7 +142,7 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
 
                 // Find the watcher to mark done/failed
                 let watcher = watchers.iter()
-                    .find(|_w| file_path.starts_with(&PathBuf::from(&instrument.watch_path)));
+                    .find(|_w| file_path.starts_with(PathBuf::from(&instrument.watch_path)));
 
                 // Classify the run
                 let classification = match classifier.classify(&file_path, &instrument) {
@@ -197,10 +191,8 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                             if let Some(w) = watcher {
                                 w.mark_failed(&file_path);
                             }
-                        } else {
-                            if let Some(w) = watcher {
-                                w.mark_done(&file_path);
-                            }
+                        } else if let Some(w) = watcher {
+                            w.mark_done(&file_path);
                         }
                     }
                     Err(e) => {

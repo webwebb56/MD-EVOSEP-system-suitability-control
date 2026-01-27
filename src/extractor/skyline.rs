@@ -1,9 +1,9 @@
 //! Skyline discovery and utilities.
 
 use anyhow::Result;
-use std::path::PathBuf;
 use sha2::{Digest, Sha256};
 use std::path::Path;
+use std::path::PathBuf;
 
 /// Discover SkylineCmd.exe location.
 pub fn discover_skyline() -> Option<PathBuf> {
@@ -79,9 +79,7 @@ fn discover_from_registry() -> Option<PathBuf> {
 pub fn get_version(skyline_path: &Path) -> Result<String> {
     use std::process::Command;
 
-    let output = Command::new(skyline_path)
-        .arg("--version")
-        .output()?;
+    let output = Command::new(skyline_path).arg("--version").output()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -100,7 +98,12 @@ pub fn get_version(skyline_path: &Path) -> Result<String> {
         .map(|line| {
             // Try to extract just the version number
             line.split_whitespace()
-                .find(|part| part.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false))
+                .find(|part| {
+                    part.chars()
+                        .next()
+                        .map(|c| c.is_ascii_digit())
+                        .unwrap_or(false)
+                })
                 .unwrap_or(line.trim())
         })
         .unwrap_or("unknown")

@@ -20,7 +20,8 @@ use crate::extractor::skyline;
 const SINGLE_INSTANCE_MUTEX: &str = "Local\\MassDynamicsQCAgent";
 
 /// GitHub releases URL for update checks
-const RELEASES_URL: &str = "https://github.com/webwebb56/MD-EVOSEP-system-suitability-control/releases";
+const RELEASES_URL: &str =
+    "https://github.com/webwebb56/MD-EVOSEP-system-suitability-control/releases";
 
 /// Menu item IDs
 mod menu_ids {
@@ -68,10 +69,15 @@ impl HealthCheckResult {
         } else if self.is_healthy {
             format!("{} warning(s)", self.warnings.len())
         } else {
-            format!("{} error(s), {} warning(s)", self.errors.len(), self.warnings.len())
+            format!(
+                "{} error(s), {} warning(s)",
+                self.errors.len(),
+                self.warnings.len()
+            )
         }
     }
 
+    #[allow(dead_code)]
     fn details(&self) -> String {
         let mut lines = Vec::new();
         for err in &self.errors {
@@ -108,7 +114,9 @@ impl TrayApp {
         let config_path = config::paths::config_file();
 
         if !config_path.exists() {
-            result.add_error("Configuration file not found. Right-click tray icon to edit configuration.");
+            result.add_error(
+                "Configuration file not found. Right-click tray icon to edit configuration.",
+            );
             self.health_status = Some(result);
             return self.health_status.as_ref().unwrap();
         }
@@ -127,7 +135,7 @@ impl TrayApp {
             .skyline
             .path
             .as_ref()
-            .map(|p| std::path::PathBuf::from(p))
+            .map(std::path::PathBuf::from)
             .or_else(skyline::discover_skyline);
 
         match skyline_path {
@@ -135,7 +143,10 @@ impl TrayApp {
                 // Skyline found - good
             }
             Some(path) => {
-                result.add_error(format!("Skyline not found at configured path: {}", path.display()));
+                result.add_error(format!(
+                    "Skyline not found at configured path: {}",
+                    path.display()
+                ));
             }
             None => {
                 result.add_error("Skyline not found. Install from skyline.ms");
@@ -151,7 +162,10 @@ impl TrayApp {
         for instrument in &config.instruments {
             let watch_path = Path::new(&instrument.watch_path);
             if !watch_path.exists() {
-                result.add_error(format!("{}: Watch path does not exist: {}", instrument.id, instrument.watch_path));
+                result.add_error(format!(
+                    "{}: Watch path does not exist: {}",
+                    instrument.id, instrument.watch_path
+                ));
             } else if !watch_path.is_dir() {
                 result.add_error(format!("{}: Watch path is not a directory", instrument.id));
             }
@@ -164,16 +178,28 @@ impl TrayApp {
             let full_path = if template_path.is_absolute() {
                 template_path.to_path_buf()
             } else {
-                config::paths::data_dir().join("templates").join(&instrument.template)
+                config::paths::data_dir()
+                    .join("templates")
+                    .join(&instrument.template)
             };
 
             if !full_path.exists() {
-                result.add_warning(format!("{}: Template not found: {}", instrument.id, instrument.template));
+                result.add_warning(format!(
+                    "{}: Template not found: {}",
+                    instrument.id, instrument.template
+                ));
             }
         }
 
         // Check 6: API token configured (warning only)
-        if config.cloud.api_token.is_none() || config.cloud.api_token.as_ref().map(|t| t.is_empty()).unwrap_or(true) {
+        if config.cloud.api_token.is_none()
+            || config
+                .cloud
+                .api_token
+                .as_ref()
+                .map(|t| t.is_empty())
+                .unwrap_or(true)
+        {
             result.add_warning("API token not configured - uploads will fail");
         }
 
@@ -183,7 +209,7 @@ impl TrayApp {
 
     /// Show a Windows notification/balloon tip
     fn show_notification(&self, title: &str, message: &str) {
-        if let Some(ref tray) = self.tray_icon {
+        if let Some(ref _tray) = self.tray_icon {
             // tray-icon doesn't have built-in notification support
             // We'll use a simple message box for errors, or just print to console
             // For a proper implementation, we'd use win32 toast notifications
@@ -196,7 +222,12 @@ impl TrayApp {
 
         // Status item (disabled, just shows info)
         let version = env!("CARGO_PKG_VERSION");
-        let status_item = MenuItem::with_id(menu_ids::STATUS, &format!("MD QC Agent v{}", version), false, None);
+        let status_item = MenuItem::with_id(
+            menu_ids::STATUS,
+            format!("MD QC Agent v{}", version),
+            false,
+            None,
+        );
         menu.append(&status_item)?;
 
         // Health status from startup check
@@ -210,26 +241,38 @@ impl TrayApp {
             Some(health) => {
                 format!("Status: {} error(s)", health.errors.len())
             }
-            None => "Status: Checking...".to_string()
+            None => "Status: Checking...".to_string(),
         };
         let health_item = MenuItem::with_id(menu_ids::HEALTH_STATUS, &health_text, false, None);
         menu.append(&health_item)?;
 
         // Try to load config and show instrument count
         let instrument_text = self.get_instrument_status();
-        let instrument_item = MenuItem::with_id(menu_ids::INSTRUMENT_COUNT, &instrument_text, false, None);
+        let instrument_item =
+            MenuItem::with_id(menu_ids::INSTRUMENT_COUNT, &instrument_text, false, None);
         menu.append(&instrument_item)?;
 
         menu.append(&PredefinedMenuItem::separator())?;
 
         // Settings section
-        let config_item = MenuItem::with_id(menu_ids::OPEN_CONFIG, "Edit Configuration...", true, None);
+        let config_item =
+            MenuItem::with_id(menu_ids::OPEN_CONFIG, "Edit Configuration...", true, None);
         menu.append(&config_item)?;
 
-        let template_item = MenuItem::with_id(menu_ids::OPEN_TEMPLATE, "Open Skyline Template...", true, None);
+        let template_item = MenuItem::with_id(
+            menu_ids::OPEN_TEMPLATE,
+            "Open Skyline Template...",
+            true,
+            None,
+        );
         menu.append(&template_item)?;
 
-        let data_folder_item = MenuItem::with_id(menu_ids::OPEN_DATA_FOLDER, "Open Watch Folder...", true, None);
+        let data_folder_item = MenuItem::with_id(
+            menu_ids::OPEN_DATA_FOLDER,
+            "Open Watch Folder...",
+            true,
+            None,
+        );
         menu.append(&data_folder_item)?;
 
         let logs_item = MenuItem::with_id(menu_ids::OPEN_LOGS, "View Logs...", true, None);
@@ -244,7 +287,8 @@ impl TrayApp {
         menu.append(&PredefinedMenuItem::separator())?;
 
         // Check for Updates
-        let updates_item = MenuItem::with_id(menu_ids::CHECK_UPDATES, "Check for Updates...", true, None);
+        let updates_item =
+            MenuItem::with_id(menu_ids::CHECK_UPDATES, "Check for Updates...", true, None);
         menu.append(&updates_item)?;
 
         menu.append(&PredefinedMenuItem::separator())?;
@@ -340,9 +384,7 @@ impl TrayApp {
     fn open_config(&self) -> Result<()> {
         // Launch the GUI configuration editor
         let exe_path = std::env::current_exe()?;
-        std::process::Command::new(&exe_path)
-            .arg("gui")
-            .spawn()?;
+        std::process::Command::new(&exe_path).arg("gui").spawn()?;
         Ok(())
     }
 
@@ -369,7 +411,7 @@ impl TrayApp {
                             let skyline_exe = skyline_path.with_file_name("Skyline.exe");
                             if skyline_exe.exists() {
                                 std::process::Command::new(&skyline_exe)
-                                    .arg(&template_path)
+                                    .arg(template_path)
                                     .spawn()?;
                                 return Ok(());
                             }
@@ -512,7 +554,10 @@ impl ApplicationHandler for TrayApp {
                     // Show notification if there are issues
                     if let Some(ref health) = self.health_status {
                         if !health.is_healthy {
-                            self.show_notification("MD QC Agent", &format!("Setup incomplete: {}", health.summary()));
+                            self.show_notification(
+                                "MD QC Agent",
+                                &format!("Setup incomplete: {}", health.summary()),
+                            );
                         }
                     }
                 }
@@ -565,11 +610,13 @@ fn find_skyline() -> Option<std::path::PathBuf> {
 
     // Check ClickOnce location
     if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-        let apps_dir = std::path::Path::new(&local_app_data).join("Apps").join("2.0");
+        let apps_dir = std::path::Path::new(&local_app_data)
+            .join("Apps")
+            .join("2.0");
         if apps_dir.exists() {
             // Search for SkylineCmd.exe in the ClickOnce deployment
             if let Ok(entries) = glob::glob(&format!("{}/**/SkylineCmd.exe", apps_dir.display())) {
-                for entry in entries.flatten() {
+                if let Some(entry) = entries.flatten().next() {
                     return Some(entry);
                 }
             }

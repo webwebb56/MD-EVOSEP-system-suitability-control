@@ -108,6 +108,7 @@ impl Extractor {
         // Set process priority on Windows
         #[cfg(windows)]
         {
+            #[allow(unused_imports)]
             use std::os::windows::process::CommandExt;
             // BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
             if self.config.process_priority == "below_normal" {
@@ -146,11 +147,11 @@ impl Extractor {
         let run_metrics = self.calculate_run_metrics(&target_metrics);
 
         // Get Skyline version
-        let skyline_version = skyline::get_version(skyline_path).unwrap_or_else(|_| "unknown".to_string());
+        let skyline_version =
+            skyline::get_version(skyline_path).unwrap_or_else(|_| "unknown".to_string());
 
         // Calculate raw file hash
-        let raw_file_hash = calculate_file_hash(raw_path)
-            .unwrap_or_else(|_| "error".to_string());
+        let raw_file_hash = calculate_file_hash(raw_path).unwrap_or_else(|_| "error".to_string());
 
         // Clean up work file
         let _ = std::fs::remove_file(&report_path);
@@ -206,7 +207,11 @@ impl Extractor {
                 peak_symmetry: record.get(9).and_then(|s| s.parse().ok()),
                 mass_error_ppm: record.get(10).and_then(|s| s.parse().ok()),
                 isotope_dot_product: record.get(11).and_then(|s| s.parse().ok()),
-                detected: record.get(6).and_then(|s| s.parse::<f64>().ok()).map(|a| a > 0.0).unwrap_or(false),
+                detected: record
+                    .get(6)
+                    .and_then(|s| s.parse::<f64>().ok())
+                    .map(|a| a > 0.0)
+                    .unwrap_or(false),
             };
 
             metrics.push(target_metrics);
@@ -227,15 +232,12 @@ impl Extractor {
         };
 
         // Calculate median RT shift
-        let mut rt_deltas: Vec<f64> = targets
-            .iter()
-            .filter_map(|t| t.rt_delta)
-            .collect();
+        let mut rt_deltas: Vec<f64> = targets.iter().filter_map(|t| t.rt_delta).collect();
         rt_deltas.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let median_rt_shift = if !rt_deltas.is_empty() {
             let mid = rt_deltas.len() / 2;
-            if rt_deltas.len() % 2 == 0 {
+            if rt_deltas.len().is_multiple_of(2) {
                 Some((rt_deltas[mid - 1] + rt_deltas[mid]) / 2.0)
             } else {
                 Some(rt_deltas[mid])
@@ -245,15 +247,12 @@ impl Extractor {
         };
 
         // Calculate median mass error
-        let mut mass_errors: Vec<f64> = targets
-            .iter()
-            .filter_map(|t| t.mass_error_ppm)
-            .collect();
+        let mut mass_errors: Vec<f64> = targets.iter().filter_map(|t| t.mass_error_ppm).collect();
         mass_errors.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let median_mass_error_ppm = if !mass_errors.is_empty() {
             let mid = mass_errors.len() / 2;
-            if mass_errors.len() % 2 == 0 {
+            if mass_errors.len().is_multiple_of(2) {
                 Some((mass_errors[mid - 1] + mass_errors[mid]) / 2.0)
             } else {
                 Some(mass_errors[mid])
@@ -287,9 +286,7 @@ fn calculate_file_hash(path: &Path) -> Result<String> {
         // (e.g., concatenation of filenames and sizes)
         let mut hasher = Sha256::new();
 
-        let mut entries: Vec<_> = std::fs::read_dir(path)?
-            .filter_map(|e| e.ok())
-            .collect();
+        let mut entries: Vec<_> = std::fs::read_dir(path)?.filter_map(|e| e.ok()).collect();
         entries.sort_by_key(|e| e.path());
 
         for entry in entries {
@@ -297,7 +294,7 @@ fn calculate_file_hash(path: &Path) -> Result<String> {
             hasher.update(name.to_string_lossy().as_bytes());
 
             if let Ok(meta) = entry.metadata() {
-                hasher.update(&meta.len().to_le_bytes());
+                hasher.update(meta.len().to_le_bytes());
             }
         }
 

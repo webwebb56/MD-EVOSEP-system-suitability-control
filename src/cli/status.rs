@@ -36,10 +36,7 @@ pub async fn run() -> Result<()> {
     };
 
     println!("Config: loaded");
-    println!(
-        "Instruments: {}",
-        config.instruments.len()
-    );
+    println!("Instruments: {}", config.instruments.len());
 
     // Show spool status
     println!();
@@ -92,9 +89,7 @@ pub async fn run() -> Result<()> {
                     .unwrap_or_else(|| "unknown".to_string());
 
                 // Try to extract original filename from payload
-                let display_name = filename
-                    .strip_suffix("_payload.json")
-                    .unwrap_or(&filename);
+                let display_name = filename.strip_suffix("_payload.json").unwrap_or(&filename);
 
                 println!("{}  {}  uploaded", time, display_name);
             }

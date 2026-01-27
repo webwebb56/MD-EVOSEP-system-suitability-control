@@ -3,6 +3,8 @@
 //! All extraction results are written to a local spool before upload.
 //! This ensures no data loss even if the cloud is unreachable.
 
+#![allow(dead_code)]
+
 use anyhow::Result;
 use chrono::{Duration, Utc};
 use std::path::PathBuf;
@@ -14,7 +16,7 @@ use uuid::Uuid;
 use crate::config::{paths, SpoolConfig};
 use crate::error::SpoolError;
 use crate::types::{
-    ExtractionResult, QcPayload, RunClassification, RunInfo, ExtractionInfo, Vendor,
+    ExtractionInfo, ExtractionResult, QcPayload, RunClassification, RunInfo, Vendor,
 };
 
 /// Spool manager for pending uploads.
@@ -135,8 +137,7 @@ impl Spool {
         let final_path = self.pending_dir.join(&filename);
 
         // Write to temp file first, then rename (atomic on most filesystems)
-        std::fs::write(&temp_path, &json)
-            .map_err(|e| SpoolError::FileOperation(e.to_string()))?;
+        std::fs::write(&temp_path, &json).map_err(|e| SpoolError::FileOperation(e.to_string()))?;
 
         std::fs::rename(&temp_path, &final_path)
             .map_err(|e| SpoolError::FileOperation(e.to_string()))?;
@@ -187,8 +188,8 @@ impl Spool {
             return Ok(());
         }
 
-        let entries = std::fs::read_dir(dir)
-            .map_err(|e| SpoolError::FileOperation(e.to_string()))?;
+        let entries =
+            std::fs::read_dir(dir).map_err(|e| SpoolError::FileOperation(e.to_string()))?;
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -242,9 +243,9 @@ impl Spool {
 
     /// Move a payload to the uploading directory.
     pub fn mark_uploading(&self, path: &PathBuf) -> Result<PathBuf> {
-        let filename = path.file_name().ok_or_else(|| {
-            anyhow::anyhow!("Invalid path")
-        })?;
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
         let new_path = self.uploading_dir.join(filename);
 
         std::fs::rename(path, &new_path)?;
@@ -255,9 +256,9 @@ impl Spool {
 
     /// Move a payload to the completed directory.
     pub fn mark_completed(&self, path: &PathBuf) -> Result<()> {
-        let filename = path.file_name().ok_or_else(|| {
-            anyhow::anyhow!("Invalid path")
-        })?;
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
         let new_path = self.completed_dir.join(filename);
 
         std::fs::rename(path, &new_path)?;
@@ -271,9 +272,9 @@ impl Spool {
 
     /// Move a payload to the failed directory.
     pub fn mark_failed(&self, path: &PathBuf) -> Result<()> {
-        let filename = path.file_name().ok_or_else(|| {
-            anyhow::anyhow!("Invalid path")
-        })?;
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
         let new_path = self.failed_dir.join(filename);
 
         std::fs::rename(path, &new_path)?;
@@ -284,9 +285,9 @@ impl Spool {
 
     /// Move a payload back to pending (for retry).
     pub fn mark_pending(&self, path: &PathBuf) -> Result<PathBuf> {
-        let filename = path.file_name().ok_or_else(|| {
-            anyhow::anyhow!("Invalid path")
-        })?;
+        let filename = path
+            .file_name()
+            .ok_or_else(|| anyhow::anyhow!("Invalid path"))?;
         let new_path = self.pending_dir.join(filename);
 
         std::fs::rename(path, &new_path)?;

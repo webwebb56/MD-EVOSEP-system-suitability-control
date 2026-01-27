@@ -3,6 +3,8 @@
 //! Baselines are primarily managed by the MD cloud, but the agent
 //! needs to track active baselines for comparison metrics.
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,7 +59,7 @@ impl Default for BaselineManager {
 
 /// Compare run metrics against a baseline.
 pub fn compare_to_baseline(
-    run_metrics: &RunMetrics,
+    _run_metrics: &RunMetrics,
     target_metrics: &[TargetMetrics],
     baseline: &Baseline,
 ) -> ComparisonResult {

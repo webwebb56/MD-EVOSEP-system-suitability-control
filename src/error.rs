@@ -1,5 +1,7 @@
 //! Error types for the MD Local QC Agent.
 
+#![allow(dead_code)]
+
 use thiserror::Error;
 
 /// Main error type for the agent.

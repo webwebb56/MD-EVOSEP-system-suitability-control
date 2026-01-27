@@ -128,7 +128,10 @@ fn show_crash_dialog(report: &str, crash_file: Option<&str>) {
     if let Some(f) = crash_file {
         eprintln!("Crash report saved to: {}", f);
     }
-    eprintln!("\nReport this issue at: https://github.com/{}/issues", GITHUB_REPO);
+    eprintln!(
+        "\nReport this issue at: https://github.com/{}/issues",
+        GITHUB_REPO
+    );
 }
 
 fn open_github_issue(report: &str) {

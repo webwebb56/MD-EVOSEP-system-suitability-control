@@ -1,5 +1,7 @@
 //! Core types for the MD Local QC Agent.
 
+#![allow(dead_code)]
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -112,8 +114,8 @@ impl std::str::FromStr for Vendor {
 /// Well position on a plate (A1-H12).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct WellPosition {
-    pub row: char,    // A-H
-    pub column: u8,   // 1-12
+    pub row: char,  // A-H
+    pub column: u8, // 1-12
 }
 
 impl WellPosition {

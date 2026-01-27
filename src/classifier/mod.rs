@@ -3,15 +3,14 @@
 //! Classifies MS runs into control types (SSC0, QC_A, QC_B, SAMPLE, BLANK)
 //! based on filename tokens and well positions.
 
-use std::path::Path;
 use regex::Regex;
+use std::path::Path;
 use tracing::{debug, trace};
 
 use crate::config::InstrumentConfig;
 use crate::error::ClassificationError;
 use crate::types::{
-    ClassificationConfidence, ClassificationSource, ControlType, RunClassification,
-    WellPosition,
+    ClassificationConfidence, ClassificationSource, ControlType, RunClassification, WellPosition,
 };
 
 /// Classifier for MS runs.
@@ -41,7 +40,8 @@ impl Classifier {
             qcb_pattern: Regex::new(r"(?i)(?:^|[_\-\s.])(QC[_-]?B|QCB)(?:$|[_\-\s.])").unwrap(),
             blank_pattern: Regex::new(r"(?i)(?:^|[_\-\s.])(BLANK|BLK)(?:$|[_\-\s.])").unwrap(),
             // Well pattern: letter A-H followed by 1-12, with delimiters
-            well_pattern: Regex::new(r"(?i)(?:^|[_\-\s.])([A-H])(1[0-2]|[1-9])(?:$|[_\-\s.])").unwrap(),
+            well_pattern: Regex::new(r"(?i)(?:^|[_\-\s.])([A-H])(1[0-2]|[1-9])(?:$|[_\-\s.])")
+                .unwrap(),
         }
     }
 
@@ -250,10 +250,7 @@ mod tests {
             c.extract_well_position("run_H12_sample.raw"),
             Some(WellPosition::new('H', 12).unwrap())
         );
-        assert_eq!(
-            c.extract_well_position("no_well_here.raw"),
-            None
-        );
+        assert_eq!(c.extract_well_position("no_well_here.raw"), None);
     }
 
     #[test]
@@ -284,5 +281,4 @@ mod tests {
         assert_eq!(ct, ControlType::Sample);
         assert_eq!(source, ClassificationSource::Default);
     }
-
 }

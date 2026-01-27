@@ -164,8 +164,7 @@ impl eframe::App for ConfigEditor {
                         .show(ui, |ui| {
                             ui.label("Endpoint:");
                             ui.add(
-                                egui::TextEdit::singleline(&mut self.endpoint)
-                                    .desired_width(400.0),
+                                egui::TextEdit::singleline(&mut self.endpoint).desired_width(400.0),
                             );
                             ui.end_row();
 
@@ -291,18 +290,22 @@ impl eframe::App for ConfigEditor {
 
                                         ui.label("File Pattern:");
                                         ui.add(
-                                            egui::TextEdit::singleline(&mut instrument.file_pattern)
-                                                .desired_width(150.0)
-                                                .hint_text("e.g., *.raw"),
+                                            egui::TextEdit::singleline(
+                                                &mut instrument.file_pattern,
+                                            )
+                                            .desired_width(150.0)
+                                            .hint_text("e.g., *.raw"),
                                         );
                                         ui.end_row();
 
                                         ui.label("Template:");
                                         ui.horizontal(|ui| {
                                             ui.add(
-                                                egui::TextEdit::singleline(&mut instrument.template)
-                                                    .desired_width(300.0)
-                                                    .hint_text("Path to .sky file"),
+                                                egui::TextEdit::singleline(
+                                                    &mut instrument.template,
+                                                )
+                                                .desired_width(300.0)
+                                                .hint_text("Path to .sky file"),
                                             );
                                             if ui.button("Browse...").clicked() {
                                                 if let Some(path) = rfd::FileDialog::new()
@@ -361,8 +364,10 @@ impl eframe::App for ConfigEditor {
                         if ui.button("Save").clicked() {
                             match self.save_config() {
                                 Ok(()) => {
-                                    self.status_message =
-                                        Some(("Configuration saved successfully!".to_string(), false));
+                                    self.status_message = Some((
+                                        "Configuration saved successfully!".to_string(),
+                                        false,
+                                    ));
                                 }
                                 Err(e) => {
                                     self.status_message =

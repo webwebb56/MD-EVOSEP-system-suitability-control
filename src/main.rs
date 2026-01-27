@@ -7,21 +7,21 @@ use anyhow::Result;
 use clap::Parser;
 use tracing::info;
 
+mod baseline;
+mod classifier;
 mod cli;
 mod config;
-mod watcher;
-mod classifier;
+mod crash;
+mod error;
 mod extractor;
-mod spool;
-mod uploader;
-mod baseline;
+mod gui;
 mod metrics;
 mod service;
-mod error;
-mod types;
+mod spool;
 mod tray;
-mod gui;
-mod crash;
+mod types;
+mod uploader;
+mod watcher;
 
 use cli::{Cli, Command};
 

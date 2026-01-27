@@ -2,12 +2,12 @@
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-pub mod run;
-pub mod doctor;
-pub mod classify;
-pub mod status;
 pub mod baseline;
+pub mod classify;
 pub mod config;
+pub mod doctor;
+pub mod run;
+pub mod status;
 
 /// MD Local QC Agent - System suitability monitoring for mass spectrometry.
 #[derive(Parser, Debug)]
