@@ -1,6 +1,6 @@
 [package]
 name = "mdqc-agent"
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Mass Dynamics <engineering@massdynamics.com>"]
 description = "MD Local QC Agent - System suitability monitoring for mass spectrometry"
@@ -85,6 +85,10 @@ windows-sys = { version = "0.52", features = [
 tray-icon = "0.19"
 winit = { version = "0.30", default-features = false, features = ["rwh_06"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+# GUI config editor
+eframe = "0.29"
+rfd = "0.15"  # File dialogs
 
 [dev-dependencies]
 tempfile = "3.9"

@@ -16,8 +16,8 @@ use winit::window::WindowId;
 use crate::config;
 use crate::extractor::skyline;
 
-/// Mutex name for single instance check
-const SINGLE_INSTANCE_MUTEX: &str = "Global\\MassDynamicsQCAgent";
+/// Mutex name for single instance check (per-user to avoid cross-privilege conflicts)
+const SINGLE_INSTANCE_MUTEX: &str = "Local\\MassDynamicsQCAgent";
 
 /// GitHub releases URL for update checks
 const RELEASES_URL: &str = "https://github.com/webwebb56/MD-EVOSEP-system-suitability-control/releases";
@@ -338,20 +338,11 @@ impl TrayApp {
     }
 
     fn open_config(&self) -> Result<()> {
-        let config_path = config::paths::config_file();
-        if config_path.exists() {
-            // Open with default text editor
-            std::process::Command::new("notepad")
-                .arg(&config_path)
-                .spawn()?;
-        } else {
-            // Open the config directory
-            let config_dir = config::paths::data_dir();
-            std::fs::create_dir_all(&config_dir)?;
-            std::process::Command::new("explorer")
-                .arg(&config_dir)
-                .spawn()?;
-        }
+        // Launch the GUI configuration editor
+        let exe_path = std::env::current_exe()?;
+        std::process::Command::new(&exe_path)
+            .arg("gui")
+            .spawn()?;
         Ok(())
     }
 

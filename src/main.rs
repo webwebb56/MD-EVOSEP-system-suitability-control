@@ -20,6 +20,7 @@ mod service;
 mod error;
 mod types;
 mod tray;
+mod gui;
 
 use cli::{Cli, Command};
 
@@ -28,9 +29,10 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     // Initialize logging based on command
-    // Run and Tray use file logging; other commands use console
+    // Run and Tray use file logging; GUI has no logging; other commands use console
     let _guard = match &cli.command {
         Command::Run { .. } | Command::Tray => init_file_logging(&cli)?,
+        Command::Gui => None, // GUI doesn't need logging
         _ => init_console_logging(&cli)?,
     };
 
@@ -61,6 +63,7 @@ async fn main() -> Result<()> {
         Command::Baseline { action } => cli::baseline::run(action).await,
         Command::Config { action } => cli::config::run(action).await,
         Command::Tray => tray::run_tray().await,
+        Command::Gui => gui::run(),
         Command::Version => {
             println!("mdqc {}", env!("CARGO_PKG_VERSION"));
             Ok(())

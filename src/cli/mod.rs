@@ -83,6 +83,9 @@ pub enum Command {
     /// Run system tray icon (Windows only)
     Tray,
 
+    /// Open configuration editor GUI
+    Gui,
+
     /// Show version information
     Version,
 }
