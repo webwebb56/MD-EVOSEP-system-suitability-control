@@ -1,4 +1,6 @@
 //! GUI configuration editor using egui.
+//!
+//! Windows-only module (requires eframe/egui which are Windows-only deps).
 
 use anyhow::Result;
 use eframe::egui;

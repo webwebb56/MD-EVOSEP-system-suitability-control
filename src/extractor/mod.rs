@@ -25,9 +25,11 @@ pub struct Extractor {
 impl Extractor {
     pub fn new(config: &SkylineConfig) -> Result<Self> {
         // Discover Skyline path
+        // Handle "auto" path - treat it as None to trigger auto-discovery
         let skyline_path = config
             .path
             .as_ref()
+            .filter(|p| !p.eq_ignore_ascii_case("auto") && !p.is_empty())
             .map(PathBuf::from)
             .or_else(skyline::discover_skyline);
 

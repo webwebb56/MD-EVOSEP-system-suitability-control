@@ -14,6 +14,7 @@ mod config;
 mod crash;
 mod error;
 mod extractor;
+#[cfg(windows)]
 mod gui;
 mod metrics;
 mod service;
@@ -51,12 +52,15 @@ fn show_startup_error(message: &str) {
         .chain(Some(0))
         .collect();
 
+    // MB_ICONERROR = 0x10, MB_SETFOREGROUND = 0x10000, MB_TOPMOST = 0x40000
+    let flags: u32 = 0x10 | 0x10000 | 0x40000;
+
     unsafe {
         windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW(
             0,
             message_wide.as_ptr(),
             title_wide.as_ptr(),
-            0x10, // MB_ICONERROR
+            flags,
         );
     }
 }
@@ -108,7 +112,16 @@ async fn real_main() -> Result<()> {
         Command::Baseline { action } => cli::baseline::run(action).await,
         Command::Config { action } => cli::config::run(action).await,
         Command::Tray => tray::run_tray().await,
-        Command::Gui => gui::run(),
+        Command::Gui => {
+            #[cfg(windows)]
+            {
+                gui::run()
+            }
+            #[cfg(not(windows))]
+            {
+                anyhow::bail!("GUI is only supported on Windows")
+            }
+        }
         Command::Version => {
             println!("mdqc {}", env!("CARGO_PKG_VERSION"));
             Ok(())

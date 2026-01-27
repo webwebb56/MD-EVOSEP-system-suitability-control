@@ -264,8 +264,14 @@ fn check_skyline(config: Option<&Config>) -> Vec<CheckResult> {
     let mut results = Vec::new();
 
     // Find Skyline
+    // Handle "auto" path - treat it as None to trigger auto-discovery
     let skyline_path = if let Some(config) = config {
-        config.skyline.path.as_ref().map(std::path::PathBuf::from)
+        config
+            .skyline
+            .path
+            .as_ref()
+            .filter(|p| !p.eq_ignore_ascii_case("auto") && !p.is_empty())
+            .map(std::path::PathBuf::from)
     } else {
         None
     };

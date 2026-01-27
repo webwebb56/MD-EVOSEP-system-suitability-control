@@ -131,10 +131,12 @@ impl TrayApp {
         };
 
         // Check 2: Skyline is installed
+        // Handle "auto" path - treat it as None to trigger auto-discovery
         let skyline_path = config
             .skyline
             .path
             .as_ref()
+            .filter(|p| !p.eq_ignore_ascii_case("auto") && !p.is_empty())
             .map(std::path::PathBuf::from)
             .or_else(skyline::discover_skyline);
 
@@ -483,7 +485,7 @@ impl TrayApp {
 }
 
 impl ApplicationHandler for TrayApp {
-    fn resumed(&mut self, _event_loop: &ActiveEventLoop) {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         // Create tray icon on first resume
         if self.tray_icon.is_none() {
             // Run health check first
@@ -520,7 +522,11 @@ impl ApplicationHandler for TrayApp {
             let menu = match self.create_menu() {
                 Ok(m) => m,
                 Err(e) => {
-                    eprintln!("Failed to create menu: {}", e);
+                    let msg = format!("Failed to create tray menu:\n\n{}", e);
+                    eprintln!("{}", msg);
+                    show_message_box("MD QC Agent - Fatal Error", &msg, true);
+                    self.running.store(false, Ordering::SeqCst);
+                    event_loop.exit();
                     return;
                 }
             };
@@ -528,7 +534,11 @@ impl ApplicationHandler for TrayApp {
             let icon = match self.create_icon() {
                 Ok(i) => i,
                 Err(e) => {
-                    eprintln!("Failed to create icon: {}", e);
+                    let msg = format!("Failed to load tray icon:\n\n{}", e);
+                    eprintln!("{}", msg);
+                    show_message_box("MD QC Agent - Fatal Error", &msg, true);
+                    self.running.store(false, Ordering::SeqCst);
+                    event_loop.exit();
                     return;
                 }
             };
@@ -562,7 +572,11 @@ impl ApplicationHandler for TrayApp {
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to create tray icon: {}", e);
+                    let msg = format!("Failed to create system tray icon:\n\n{}", e);
+                    eprintln!("{}", msg);
+                    show_message_box("MD QC Agent - Fatal Error", &msg, true);
+                    self.running.store(false, Ordering::SeqCst);
+                    event_loop.exit();
                 }
             }
         }
@@ -626,7 +640,7 @@ fn find_skyline() -> Option<std::path::PathBuf> {
     None
 }
 
-/// Show a Windows message box
+/// Show a Windows message box (ensures it appears in foreground)
 fn show_message_box(title: &str, message: &str, is_error: bool) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
@@ -635,8 +649,13 @@ fn show_message_box(title: &str, message: &str, is_error: bool) {
     let title_wide: Vec<u16> = OsStr::new(title).encode_wide().chain(Some(0)).collect();
     let message_wide: Vec<u16> = OsStr::new(message).encode_wide().chain(Some(0)).collect();
 
-    // MB_OK = 0, MB_ICONERROR = 0x10, MB_ICONINFORMATION = 0x40
-    let flags: u32 = if is_error { 0x10 } else { 0x40 };
+    // MB_OK = 0x00000000
+    // MB_ICONERROR = 0x00000010
+    // MB_ICONINFORMATION = 0x00000040
+    // MB_SETFOREGROUND = 0x00010000 (bring to foreground)
+    // MB_TOPMOST = 0x00040000 (stay on top)
+    let base_flags: u32 = 0x00010000 | 0x00040000; // SETFOREGROUND | TOPMOST
+    let flags: u32 = base_flags | if is_error { 0x10 } else { 0x40 };
 
     unsafe {
         windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW(
