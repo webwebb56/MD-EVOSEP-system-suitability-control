@@ -2,7 +2,7 @@
 ; https://jrsoftware.org/isinfo.php
 
 #define MyAppName "MD QC Agent"
-#define MyAppVersion "0.3.0"
+#define MyAppVersion "0.4.0"
 #define MyAppPublisher "Mass Dynamics"
 #define MyAppURL "https://massdynamics.com"
 #define MyAppExeName "mdqc.exe"
@@ -74,7 +74,7 @@ Name: "{commonappdata}\MassDynamics\QC\spool"
 ; Start Menu
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "tray"; Comment: "MD QC Agent - System Tray"
 Name: "{autoprograms}\{#MyAppName} Diagnostics"; Filename: "{app}\{#MyAppExeName}"; Parameters: "doctor"; Comment: "Run system diagnostics"
-Name: "{autoprograms}\{#MyAppName} Configuration"; Filename: "notepad.exe"; Parameters: """{commonappdata}\MassDynamics\QC\config.toml"""; Comment: "Edit configuration"
+Name: "{autoprograms}\{#MyAppName} Configuration"; Filename: "{app}\{#MyAppExeName}"; Parameters: "gui"; Comment: "Edit configuration"
 
 ; Desktop icon (optional)
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Parameters: "tray"; Tasks: desktopicon
