@@ -38,10 +38,52 @@ pub async fn run_foreground() -> Result<()> {
     run_agent(config, &mut shutdown_rx).await
 }
 
+/// Generate a hardware-based agent ID.
+fn generate_agent_id() -> String {
+    // Try to get a machine-specific ID
+    #[cfg(windows)]
+    {
+        // On Windows, use machine GUID from registry
+        use winreg::enums::*;
+        use winreg::RegKey;
+
+        if let Ok(hklm) = RegKey::predef(HKEY_LOCAL_MACHINE)
+            .open_subkey(r"SOFTWARE\Microsoft\Cryptography")
+        {
+            if let Ok(guid) = hklm.get_value::<String, _>("MachineGuid") {
+                return format!("mdqc-{}", &guid[..8]);
+            }
+        }
+    }
+
+    // Fallback: use hostname + random suffix
+    let hostname = hostname::get()
+        .map(|h| h.to_string_lossy().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+
+    let random: u32 = rand::random();
+    format!("mdqc-{}-{:08x}", hostname, random)
+}
+
+/// Resolve the agent ID from config or generate one.
+fn resolve_agent_id(config: &Config) -> String {
+    if config.agent.agent_id == "auto" {
+        generate_agent_id()
+    } else {
+        config.agent.agent_id.clone()
+    }
+}
+
 /// Main agent processing loop.
 pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> Result<()> {
     // Initialize components
     let spool = Spool::new(&config.spool)?;
+
+    // Set agent ID
+    let agent_id = resolve_agent_id(&config);
+    spool.set_agent_id(agent_id.clone()).await;
+    info!(agent_id = %agent_id, "Agent ID configured");
+
     let uploader = Uploader::new(&config.cloud, spool.clone())?;
     let extractor = Extractor::new(&config.skyline)?;
     let classifier = Classifier::new();
@@ -75,6 +117,7 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
 
     info!(
         instrument_count = config.instruments.len(),
+        agent_id = %agent_id,
         "Agent started, watching for QC runs"
     );
 
@@ -90,7 +133,8 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
             // Process incoming files
             Some(tracked_file) = file_rx.recv() => {
                 let file_path = tracked_file.path.clone();
-                info!(path = ?file_path, "Processing file");
+                let vendor = tracked_file.vendor;
+                info!(path = ?file_path, vendor = %vendor, "Processing file");
 
                 // Find the instrument config for this file
                 let instrument = config.instruments.iter()
@@ -102,11 +146,18 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                     continue;
                 };
 
+                // Find the watcher to mark done/failed
+                let watcher = watchers.iter()
+                    .find(|_w| file_path.starts_with(&PathBuf::from(&instrument.watch_path)));
+
                 // Classify the run
                 let classification = match classifier.classify(&file_path, &instrument) {
                     Ok(c) => c,
                     Err(e) => {
                         warn!(path = ?file_path, error = %e, "Classification failed");
+                        if let Some(w) = watcher {
+                            w.mark_failed(&file_path);
+                        }
                         continue;
                     }
                 };
@@ -118,6 +169,9 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                         control_type = %classification.control_type,
                         "Skipping non-QC run"
                     );
+                    if let Some(w) = watcher {
+                        w.mark_done(&file_path);
+                    }
                     continue;
                 }
 
@@ -137,13 +191,23 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                             "Extraction complete"
                         );
 
-                        // Spool for upload
-                        if let Err(e) = spool.enqueue(&result, &classification).await {
+                        // Spool for upload (pass vendor from instrument config)
+                        if let Err(e) = spool.enqueue(&result, &classification, instrument.vendor).await {
                             error!(path = ?file_path, error = %e, "Failed to spool result");
+                            if let Some(w) = watcher {
+                                w.mark_failed(&file_path);
+                            }
+                        } else {
+                            if let Some(w) = watcher {
+                                w.mark_done(&file_path);
+                            }
                         }
                     }
                     Err(e) => {
                         error!(path = ?file_path, error = %e, "Extraction failed");
+                        if let Some(w) = watcher {
+                            w.mark_failed(&file_path);
+                        }
                         // TODO: Spool error record for cloud notification
                     }
                 }
@@ -163,3 +227,5 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
     info!("Agent stopped");
     Ok(())
 }
+
+use std::path::PathBuf;

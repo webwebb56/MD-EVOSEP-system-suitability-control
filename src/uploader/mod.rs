@@ -1,9 +1,9 @@
-//! Cloud uploader with retry logic.
+//! Cloud uploader with retry logic and mTLS.
 //!
 //! Uploads QC payloads to the MD cloud with exponential backoff retry.
+//! Uses mutual TLS (mTLS) with client certificates from Windows cert store.
 
 use anyhow::Result;
-use backoff::ExponentialBackoff;
 use std::path::PathBuf;
 use std::time::Duration;
 use tracing::{debug, error, info, warn};
@@ -12,6 +12,20 @@ use crate::config::CloudConfig;
 use crate::error::UploadError;
 use crate::spool::Spool;
 use crate::types::QcPayload;
+
+/// Retry configuration per spec:
+/// Attempt 1: immediate
+/// Attempt 2: 30s ± 10s
+/// Attempt 3: 2m ± 30s
+/// Attempt 4: 10m ± 2m
+/// Attempt 5: 1h ± 10m
+const RETRY_DELAYS_SECS: [(u64, u64); 5] = [
+    (0, 0),        // Attempt 1: immediate
+    (20, 40),      // Attempt 2: 30s ± 10s
+    (90, 150),     // Attempt 3: 2m ± 30s
+    (480, 720),    // Attempt 4: 10m ± 2m
+    (3000, 4200),  // Attempt 5: 1h ± 10m
+];
 
 /// Uploader for sending payloads to the cloud.
 #[derive(Clone)]
@@ -22,8 +36,19 @@ pub struct Uploader {
 }
 
 impl Uploader {
-    /// Create a new uploader.
+    /// Create a new uploader with mTLS support.
     pub fn new(config: &CloudConfig, spool: Spool) -> Result<Self> {
+        let client = Self::build_client(config)?;
+
+        Ok(Self {
+            config: config.clone(),
+            client,
+            spool,
+        })
+    }
+
+    /// Build the HTTP client with mTLS if certificate is configured.
+    fn build_client(config: &CloudConfig) -> Result<reqwest::Client> {
         let mut client_builder = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(10));
@@ -34,16 +59,90 @@ impl Uploader {
             client_builder = client_builder.proxy(proxy);
         }
 
-        // TODO: Configure mTLS with certificate from Windows cert store
-        // This would use native-tls or rustls with Windows cert store integration
+        // Configure mTLS if certificate thumbprint is provided
+        if let Some(ref thumbprint) = config.certificate_thumbprint {
+            let identity = Self::load_identity_from_cert_store(thumbprint)?;
+            client_builder = client_builder.identity(identity);
+            info!(thumbprint = %thumbprint, "mTLS client certificate configured");
+        } else {
+            warn!("No certificate thumbprint configured - uploads will be unauthenticated");
+        }
 
-        let client = client_builder.build()?;
+        Ok(client_builder.build()?)
+    }
 
-        Ok(Self {
-            config: config.clone(),
-            client,
-            spool,
-        })
+    /// Load client identity from Windows certificate store.
+    #[cfg(windows)]
+    fn load_identity_from_cert_store(thumbprint: &str) -> Result<reqwest::Identity> {
+        use std::io::Read;
+
+        // Normalize thumbprint (remove spaces, uppercase)
+        let thumbprint = thumbprint.replace(" ", "").to_uppercase();
+
+        // Use certutil or PowerShell to export the certificate with private key
+        // This is a workaround since reqwest doesn't directly support Windows cert store
+
+        // For production, consider using native-tls with schannel backend
+        // or rustls with a custom certificate resolver
+
+        // Export cert + key to PKCS#12 format
+        let temp_dir = std::env::temp_dir();
+        let pfx_path = temp_dir.join(format!("mdqc_cert_{}.pfx", &thumbprint[..8]));
+
+        // Use PowerShell to export (requires the cert to be exportable)
+        let output = std::process::Command::new("powershell")
+            .args([
+                "-Command",
+                &format!(
+                    r#"$cert = Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object {{ $_.Thumbprint -eq '{}' }};
+                    if ($cert) {{
+                        $pwd = ConvertTo-SecureString -String 'mdqc_temp_pwd' -Force -AsPlainText;
+                        Export-PfxCertificate -Cert $cert -FilePath '{}' -Password $pwd | Out-Null;
+                        Write-Output 'OK'
+                    }} else {{
+                        Write-Error 'Certificate not found'
+                    }}"#,
+                    thumbprint,
+                    pfx_path.display()
+                ),
+            ])
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("Failed to export certificate: {}", stderr);
+        }
+
+        // Read the PFX file
+        let mut pfx_data = Vec::new();
+        std::fs::File::open(&pfx_path)?.read_to_end(&mut pfx_data)?;
+
+        // Clean up temp file
+        let _ = std::fs::remove_file(&pfx_path);
+
+        // Create identity from PFX
+        let identity = reqwest::Identity::from_pkcs12_der(&pfx_data, "mdqc_temp_pwd")?;
+
+        Ok(identity)
+    }
+
+    /// Load client identity - stub for non-Windows platforms.
+    #[cfg(not(windows))]
+    fn load_identity_from_cert_store(thumbprint: &str) -> Result<reqwest::Identity> {
+        // On non-Windows, look for a PEM file in the config directory
+        let cert_path = crate::config::paths::data_dir()
+            .join("certs")
+            .join(format!("{}.pem", thumbprint));
+
+        if cert_path.exists() {
+            let pem_data = std::fs::read(&cert_path)?;
+            Ok(reqwest::Identity::from_pem(&pem_data)?)
+        } else {
+            anyhow::bail!(
+                "Certificate not found. On non-Windows, place PEM file at: {}",
+                cert_path.display()
+            )
+        }
     }
 
     /// Run the upload loop.
@@ -85,7 +184,7 @@ impl Uploader {
         }
     }
 
-    /// Upload a single payload with retry.
+    /// Upload a single payload with exactly 5 retry attempts per spec.
     async fn upload_with_retry(&self, path: &PathBuf) -> Result<(), UploadError> {
         // Move to uploading
         let uploading_path = self.spool.mark_uploading(path)
@@ -107,45 +206,53 @@ impl Uploader {
                 message: e.to_string(),
             })?;
 
-        // Configure backoff
-        let backoff = ExponentialBackoff {
-            initial_interval: Duration::from_secs(30),
-            max_interval: Duration::from_secs(3600), // 1 hour max
-            max_elapsed_time: Some(Duration::from_secs(86400)), // 24 hours total
-            ..Default::default()
-        };
+        // Attempt upload with exactly 5 retries per spec
+        let mut _last_error = None;
 
-        // Attempt upload with retry
-        let result = backoff::future::retry(backoff, || async {
+        for (attempt, (min_delay, max_delay)) in RETRY_DELAYS_SECS.iter().enumerate() {
+            // Apply delay (with jitter) for attempts after the first
+            if attempt > 0 {
+                let delay = if max_delay > min_delay {
+                    use rand::Rng;
+                    let jitter = rand::thread_rng().gen_range(*min_delay..=*max_delay);
+                    Duration::from_secs(jitter)
+                } else {
+                    Duration::from_secs(*min_delay)
+                };
+
+                info!(
+                    run_id = %payload.run.run_id,
+                    attempt = attempt + 1,
+                    delay_secs = delay.as_secs(),
+                    "Retrying upload after delay"
+                );
+                tokio::time::sleep(delay).await;
+            }
+
             match self.upload_payload(&payload).await {
-                Ok(()) => Ok(()),
+                Ok(()) => {
+                    self.spool.mark_completed(&uploading_path)
+                        .map_err(|e| UploadError::Server {
+                            status: 0,
+                            message: e.to_string(),
+                        })?;
+                    return Ok(());
+                }
                 Err(e) => {
                     warn!(
                         run_id = %payload.run.run_id,
+                        attempt = attempt + 1,
                         error = %e,
-                        "Upload attempt failed, will retry"
+                        "Upload attempt failed"
                     );
-                    Err(backoff::Error::transient(e))
+                    _last_error = Some(e);
                 }
             }
-        })
-        .await;
-
-        match result {
-            Ok(()) => {
-                self.spool.mark_completed(&uploading_path)
-                    .map_err(|e| UploadError::Server {
-                        status: 0,
-                        message: e.to_string(),
-                    })?;
-                Ok(())
-            }
-            Err(e) => {
-                // Move to failed after all retries exhausted
-                let _ = self.spool.mark_failed(&uploading_path);
-                Err(UploadError::RetryExhausted(5))
-            }
         }
+
+        // All 5 attempts exhausted - move to failed
+        let _ = self.spool.mark_failed(&uploading_path);
+        Err(UploadError::RetryExhausted(5))
     }
 
     /// Upload a single payload (single attempt).
@@ -154,6 +261,7 @@ impl Uploader {
 
         info!(
             run_id = %payload.run.run_id,
+            correlation_id = %payload.correlation_id,
             url = %url,
             "Uploading payload"
         );
@@ -173,6 +281,13 @@ impl Uploader {
                 "Upload successful"
             );
             Ok(())
+        } else if status.as_u16() == 401 || status.as_u16() == 403 {
+            let body = response.text().await.unwrap_or_default();
+            Err(UploadError::Authentication(format!(
+                "status {}: {}",
+                status.as_u16(),
+                body
+            )))
         } else {
             let body = response.text().await.unwrap_or_default();
             Err(UploadError::Server {

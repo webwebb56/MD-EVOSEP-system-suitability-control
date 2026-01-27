@@ -46,7 +46,7 @@ impl Extractor {
         &self,
         raw_path: &Path,
         instrument: &InstrumentConfig,
-        classification: &RunClassification,
+        _classification: &RunClassification,
     ) -> Result<ExtractionResult, ExtractionError> {
         let skyline_path = self
             .skyline_path
@@ -91,7 +91,8 @@ impl Extractor {
 
         // Build Skyline command
         let mut cmd = Command::new(skyline_path);
-        cmd.arg("--in")
+        cmd.current_dir(&work_dir) // Set working directory to spool/work
+            .arg("--in")
             .arg(&template_path)
             .arg("--import-file")
             .arg(raw_path)

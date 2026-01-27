@@ -248,6 +248,7 @@ pub struct ExtractionResult {
 pub struct QcPayload {
     pub schema_version: String,
     pub payload_id: Uuid,
+    pub correlation_id: String,
     pub agent_id: String,
     pub agent_version: String,
     pub timestamp: DateTime<Utc>,
