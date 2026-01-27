@@ -2,6 +2,7 @@
 
 use anyhow::Result;
 use image::GenericImageView;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tray_icon::{
@@ -14,10 +15,12 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::WindowId;
 
 use crate::config;
+use crate::extractor::skyline;
 
 /// Menu item IDs
 mod menu_ids {
     pub const STATUS: &str = "status";
+    pub const HEALTH_STATUS: &str = "health_status";
     pub const INSTRUMENT_COUNT: &str = "instrument_count";
     pub const OPEN_CONFIG: &str = "open_config";
     pub const OPEN_LOGS: &str = "open_logs";
@@ -27,10 +30,59 @@ mod menu_ids {
     pub const EXIT: &str = "exit";
 }
 
+/// Result of a startup health check
+#[derive(Debug)]
+struct HealthCheckResult {
+    is_healthy: bool,
+    errors: Vec<String>,
+    warnings: Vec<String>,
+}
+
+impl HealthCheckResult {
+    fn new() -> Self {
+        Self {
+            is_healthy: true,
+            errors: Vec::new(),
+            warnings: Vec::new(),
+        }
+    }
+
+    fn add_error(&mut self, msg: impl Into<String>) {
+        self.is_healthy = false;
+        self.errors.push(msg.into());
+    }
+
+    fn add_warning(&mut self, msg: impl Into<String>) {
+        self.warnings.push(msg.into());
+    }
+
+    fn summary(&self) -> String {
+        if self.is_healthy && self.warnings.is_empty() {
+            "All systems operational".to_string()
+        } else if self.is_healthy {
+            format!("{} warning(s)", self.warnings.len())
+        } else {
+            format!("{} error(s), {} warning(s)", self.errors.len(), self.warnings.len())
+        }
+    }
+
+    fn details(&self) -> String {
+        let mut lines = Vec::new();
+        for err in &self.errors {
+            lines.push(format!("ERROR: {}", err));
+        }
+        for warn in &self.warnings {
+            lines.push(format!("Warning: {}", warn));
+        }
+        lines.join("\n")
+    }
+}
+
 /// Application state for the tray icon
 struct TrayApp {
     tray_icon: Option<TrayIcon>,
     running: Arc<AtomicBool>,
+    health_status: Option<HealthCheckResult>,
 }
 
 impl TrayApp {
@@ -38,6 +90,105 @@ impl TrayApp {
         Self {
             tray_icon: None,
             running: Arc::new(AtomicBool::new(true)),
+            health_status: None,
+        }
+    }
+
+    /// Run startup health checks
+    fn run_health_check(&mut self) -> &HealthCheckResult {
+        let mut result = HealthCheckResult::new();
+
+        // Check 1: Configuration file exists and is valid
+        let config_path = match config::paths::config_file() {
+            Ok(p) => p,
+            Err(e) => {
+                result.add_error(format!("Cannot determine config path: {}", e));
+                self.health_status = Some(result);
+                return self.health_status.as_ref().unwrap();
+            }
+        };
+
+        if !config_path.exists() {
+            result.add_error("Configuration file not found. Right-click tray icon to edit configuration.");
+            self.health_status = Some(result);
+            return self.health_status.as_ref().unwrap();
+        }
+
+        let config = match config::Config::load(Some(&config_path)) {
+            Ok(c) => c,
+            Err(e) => {
+                result.add_error(format!("Invalid configuration: {}", e));
+                self.health_status = Some(result);
+                return self.health_status.as_ref().unwrap();
+            }
+        };
+
+        // Check 2: Skyline is installed
+        let skyline_path = config
+            .skyline
+            .path
+            .as_ref()
+            .map(|p| std::path::PathBuf::from(p))
+            .or_else(skyline::discover_skyline);
+
+        match skyline_path {
+            Some(path) if path.exists() => {
+                // Skyline found - good
+            }
+            Some(path) => {
+                result.add_error(format!("Skyline not found at configured path: {}", path.display()));
+            }
+            None => {
+                result.add_error("Skyline not found. Install from skyline.ms");
+            }
+        }
+
+        // Check 3: At least one instrument configured
+        if config.instruments.is_empty() {
+            result.add_warning("No instruments configured");
+        }
+
+        // Check 4: Watch paths exist
+        for instrument in &config.instruments {
+            let watch_path = Path::new(&instrument.watch_path);
+            if !watch_path.exists() {
+                result.add_error(format!("{}: Watch path does not exist: {}", instrument.id, instrument.watch_path));
+            } else if !watch_path.is_dir() {
+                result.add_error(format!("{}: Watch path is not a directory", instrument.id));
+            }
+        }
+
+        // Check 5: Templates exist
+        for instrument in &config.instruments {
+            let template_path = Path::new(&instrument.template);
+            // Check if it's an absolute path or relative to template dir
+            let full_path = if template_path.is_absolute() {
+                template_path.to_path_buf()
+            } else {
+                config::paths::data_dir().join("templates").join(&instrument.template)
+            };
+
+            if !full_path.exists() {
+                result.add_warning(format!("{}: Template not found: {}", instrument.id, instrument.template));
+            }
+        }
+
+        // Check 6: API token configured (warning only)
+        if config.cloud.api_token.is_none() || config.cloud.api_token.as_ref().map(|t| t.is_empty()).unwrap_or(true) {
+            result.add_warning("API token not configured - uploads will fail");
+        }
+
+        self.health_status = Some(result);
+        self.health_status.as_ref().unwrap()
+    }
+
+    /// Show a Windows notification/balloon tip
+    fn show_notification(&self, title: &str, message: &str) {
+        if let Some(ref tray) = self.tray_icon {
+            // tray-icon doesn't have built-in notification support
+            // We'll use a simple message box for errors, or just print to console
+            // For a proper implementation, we'd use win32 toast notifications
+            println!("[{}] {}", title, message);
         }
     }
 
@@ -45,8 +196,25 @@ impl TrayApp {
         let menu = Menu::new();
 
         // Status item (disabled, just shows info)
-        let status_item = MenuItem::with_id(menu_ids::STATUS, "MD QC Agent v0.1.0", false, None);
+        let version = env!("CARGO_PKG_VERSION");
+        let status_item = MenuItem::with_id(menu_ids::STATUS, &format!("MD QC Agent v{}", version), false, None);
         menu.append(&status_item)?;
+
+        // Health status from startup check
+        let health_text = match &self.health_status {
+            Some(health) if health.is_healthy && health.warnings.is_empty() => {
+                "Status: Ready".to_string()
+            }
+            Some(health) if health.is_healthy => {
+                format!("Status: {} warning(s)", health.warnings.len())
+            }
+            Some(health) => {
+                format!("Status: {} error(s)", health.errors.len())
+            }
+            None => "Status: Checking...".to_string()
+        };
+        let health_item = MenuItem::with_id(menu_ids::HEALTH_STATUS, &health_text, false, None);
+        menu.append(&health_item)?;
 
         // Try to load config and show instrument count
         let instrument_text = self.get_instrument_status();
@@ -270,6 +438,30 @@ impl ApplicationHandler for TrayApp {
     fn resumed(&mut self, _event_loop: &ActiveEventLoop) {
         // Create tray icon on first resume
         if self.tray_icon.is_none() {
+            // Run health check first
+            println!("Running startup health check...");
+            let health = self.run_health_check();
+
+            // Print health check results to console
+            if health.is_healthy {
+                if health.warnings.is_empty() {
+                    println!("Health check: PASSED");
+                } else {
+                    println!("Health check: PASSED with warnings");
+                    for warn in &health.warnings {
+                        println!("  Warning: {}", warn);
+                    }
+                }
+            } else {
+                println!("Health check: FAILED");
+                for err in &health.errors {
+                    println!("  Error: {}", err);
+                }
+                for warn in &health.warnings {
+                    println!("  Warning: {}", warn);
+                }
+            }
+
             let menu = match self.create_menu() {
                 Ok(m) => m,
                 Err(e) => {
@@ -286,9 +478,16 @@ impl ApplicationHandler for TrayApp {
                 }
             };
 
+            // Set tooltip based on health status
+            let tooltip = match &self.health_status {
+                Some(h) if h.is_healthy => "MD QC Agent - Ready",
+                Some(_) => "MD QC Agent - Issues detected (right-click for details)",
+                None => "MD QC Agent",
+            };
+
             let tray_icon = TrayIconBuilder::new()
                 .with_menu(Box::new(menu))
-                .with_tooltip("MD QC Agent")
+                .with_tooltip(tooltip)
                 .with_icon(icon)
                 .build();
 
@@ -296,6 +495,13 @@ impl ApplicationHandler for TrayApp {
                 Ok(ti) => {
                     self.tray_icon = Some(ti);
                     println!("System tray icon created successfully");
+
+                    // Show notification if there are issues
+                    if let Some(ref health) = self.health_status {
+                        if !health.is_healthy {
+                            self.show_notification("MD QC Agent", &format!("Setup incomplete: {}", health.summary()));
+                        }
+                    }
                 }
                 Err(e) => {
                     eprintln!("Failed to create tray icon: {}", e);
