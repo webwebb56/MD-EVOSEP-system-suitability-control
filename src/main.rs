@@ -25,8 +25,49 @@ mod watcher;
 
 use cli::{Cli, Command};
 
+fn main() {
+    // Wrap everything to catch early errors
+    if let Err(e) = real_main() {
+        // Try to show error - this catches errors before tokio/logging are initialized
+        show_startup_error(&format!("{:?}", e));
+        std::process::exit(1);
+    }
+}
+
+#[cfg(windows)]
+fn show_startup_error(message: &str) {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    let title = "MD QC Agent - Startup Error";
+    let full_message = format!(
+        "Failed to start MD QC Agent:\n\n{}\n\nPlease run 'mdqc doctor' for diagnostics.",
+        message
+    );
+
+    let title_wide: Vec<u16> = OsStr::new(title).encode_wide().chain(Some(0)).collect();
+    let message_wide: Vec<u16> = OsStr::new(&full_message)
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+
+    unsafe {
+        windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW(
+            0,
+            message_wide.as_ptr(),
+            title_wide.as_ptr(),
+            0x10, // MB_ICONERROR
+        );
+    }
+}
+
+#[cfg(not(windows))]
+fn show_startup_error(message: &str) {
+    eprintln!("MD QC Agent startup error: {}", message);
+}
+
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn real_main() -> Result<()> {
     // Install crash handler first thing
     crash::install_panic_hook();
 

@@ -2,7 +2,7 @@
 ; https://jrsoftware.org/isinfo.php
 
 #define MyAppName "MD QC Agent"
-#define MyAppVersion "0.4.1"
+#define MyAppVersion "0.4.2"
 #define MyAppPublisher "Mass Dynamics"
 #define MyAppURL "https://massdynamics.com"
 #define MyAppExeName "mdqc.exe"
