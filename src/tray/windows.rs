@@ -1,6 +1,7 @@
 //! Windows system tray implementation.
 
 use anyhow::Result;
+use image::GenericImageView;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tray_icon::{
@@ -108,78 +109,25 @@ impl TrayApp {
     }
 
     fn create_icon(&self) -> Result<tray_icon::Icon> {
-        // Create a simple 32x32 icon programmatically
-        // Blue square with white "M" for Mass Dynamics
-        let size = 32u32;
-        let mut rgba = vec![0u8; (size * size * 4) as usize];
+        // Load the embedded PNG icon (Mass Dynamics logo)
+        const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
 
-        for y in 0..size {
-            for x in 0..size {
-                let idx = ((y * size + x) * 4) as usize;
+        // Decode the PNG
+        let img = image::load_from_memory(ICON_PNG)
+            .map_err(|e| anyhow::anyhow!("Failed to decode icon: {}", e))?;
 
-                // Blue background (#2563eb - a nice blue)
-                let (r, g, b) = (37, 99, 235);
+        // Resize to 32x32 for tray icon (standard size)
+        let img = img.resize_exact(32, 32, image::imageops::FilterType::Lanczos3);
 
-                // Draw a simple "M" shape in white
-                let is_m = Self::is_m_pixel(x, y, size);
+        // Convert to RGBA
+        let rgba = img.to_rgba8();
+        let (width, height) = rgba.dimensions();
+        let raw_data = rgba.into_raw();
 
-                if is_m {
-                    // White pixel
-                    rgba[idx] = 255;     // R
-                    rgba[idx + 1] = 255; // G
-                    rgba[idx + 2] = 255; // B
-                    rgba[idx + 3] = 255; // A
-                } else {
-                    // Blue pixel
-                    rgba[idx] = r;
-                    rgba[idx + 1] = g;
-                    rgba[idx + 2] = b;
-                    rgba[idx + 3] = 255; // A
-                }
-            }
-        }
-
-        let icon = tray_icon::Icon::from_rgba(rgba, size, size)
+        let icon = tray_icon::Icon::from_rgba(raw_data, width, height)
             .map_err(|e| anyhow::anyhow!("Failed to create icon: {}", e))?;
 
         Ok(icon)
-    }
-
-    /// Determine if a pixel is part of the "M" letter
-    fn is_m_pixel(x: u32, y: u32, size: u32) -> bool {
-        // Simple M shape for 32x32 icon
-        // M spans from y=8 to y=24, x from 6 to 26
-        let margin = 6;
-        let stroke = 4;
-
-        if y < 8 || y > 24 {
-            return false;
-        }
-
-        // Left vertical stroke
-        if x >= margin && x < margin + stroke {
-            return true;
-        }
-
-        // Right vertical stroke
-        if x >= size - margin - stroke && x < size - margin {
-            return true;
-        }
-
-        // Left diagonal (going down-right from top-left)
-        let diag_y = y - 8;
-        let left_diag_x = margin + stroke + (diag_y / 2);
-        if x >= left_diag_x && x < left_diag_x + stroke && diag_y < 10 {
-            return true;
-        }
-
-        // Right diagonal (going down-left from top-right)
-        let right_diag_x = size - margin - stroke - (diag_y / 2) - stroke;
-        if x >= right_diag_x && x < right_diag_x + stroke && diag_y < 10 {
-            return true;
-        }
-
-        false
     }
 
     fn handle_menu_event(&self, event: MenuEvent) {
