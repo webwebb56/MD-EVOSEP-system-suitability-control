@@ -30,12 +30,18 @@ impl Classifier {
         // SSC0, SSC_0, SSC-0, ssc0
         // QCA, QC_A, QC-A, qc_a
         // QCB, QC_B, QC-B, qc_b
+        //
+        // Note: Rust regex treats _ as a word character, so \b doesn't work
+        // at underscore boundaries. We use explicit delimiters instead:
+        // (?:^|[_\-\s.]) = start of string OR delimiter before
+        // (?:$|[_\-\s.]) = end of string OR delimiter after
         Self {
-            ssc0_pattern: Regex::new(r"(?i)\b(SSC[_-]?0|SSC)\b").unwrap(),
-            qca_pattern: Regex::new(r"(?i)\b(QC[_-]?A|QCA)\b").unwrap(),
-            qcb_pattern: Regex::new(r"(?i)\b(QC[_-]?B|QCB)\b").unwrap(),
-            blank_pattern: Regex::new(r"(?i)\b(BLANK|BLK)\b").unwrap(),
-            well_pattern: Regex::new(r"(?i)\b([A-H])([1-9]|1[0-2])\b").unwrap(),
+            ssc0_pattern: Regex::new(r"(?i)(?:^|[_\-\s.])(SSC[_-]?0|SSC)(?:$|[_\-\s.])").unwrap(),
+            qca_pattern: Regex::new(r"(?i)(?:^|[_\-\s.])(QC[_-]?A|QCA)(?:$|[_\-\s.])").unwrap(),
+            qcb_pattern: Regex::new(r"(?i)(?:^|[_\-\s.])(QC[_-]?B|QCB)(?:$|[_\-\s.])").unwrap(),
+            blank_pattern: Regex::new(r"(?i)(?:^|[_\-\s.])(BLANK|BLK)(?:$|[_\-\s.])").unwrap(),
+            // Well pattern: letter A-H followed by 1-12, with delimiters
+            well_pattern: Regex::new(r"(?i)(?:^|[_\-\s.])([A-H])(1[0-2]|[1-9])(?:$|[_\-\s.])").unwrap(),
         }
     }
 
@@ -278,4 +284,5 @@ mod tests {
         assert_eq!(ct, ControlType::Sample);
         assert_eq!(source, ClassificationSource::Default);
     }
+
 }

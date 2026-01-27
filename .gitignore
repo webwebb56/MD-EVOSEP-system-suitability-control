@@ -39,5 +39,5 @@ test_data/
 # Local config (use config.example.toml as template)
 config.toml
 
-# Spool data
-spool/
+# Spool data (not src/spool which is source code)
+/spool/

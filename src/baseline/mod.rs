@@ -153,6 +153,7 @@ mod tests {
     fn test_std_dev() {
         let values = vec![2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
         let sd = std_dev(&values);
-        assert!((sd - 2.0).abs() < 0.1);
+        // Sample std dev = sqrt(32/7) ≈ 2.138
+        assert!((sd - 2.138).abs() < 0.01, "Expected ~2.138, got {}", sd);
     }
 }
