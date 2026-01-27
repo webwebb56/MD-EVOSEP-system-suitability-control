@@ -1,7 +1,6 @@
 //! Windows system tray implementation.
 
 use anyhow::Result;
-use image::GenericImageView;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -99,14 +98,7 @@ impl TrayApp {
         let mut result = HealthCheckResult::new();
 
         // Check 1: Configuration file exists and is valid
-        let config_path = match config::paths::config_file() {
-            Ok(p) => p,
-            Err(e) => {
-                result.add_error(format!("Cannot determine config path: {}", e));
-                self.health_status = Some(result);
-                return self.health_status.as_ref().unwrap();
-            }
-        };
+        let config_path = config::paths::config_file();
 
         if !config_path.exists() {
             result.add_error("Configuration file not found. Right-click tray icon to edit configuration.");
@@ -114,7 +106,7 @@ impl TrayApp {
             return self.health_status.as_ref().unwrap();
         }
 
-        let config = match config::Config::load(Some(&config_path)) {
+        let config = match config::Config::load() {
             Ok(c) => c,
             Err(e) => {
                 result.add_error(format!("Invalid configuration: {}", e));
@@ -252,16 +244,13 @@ impl TrayApp {
     }
 
     fn get_instrument_status(&self) -> String {
-        let config_path = match config::paths::config_file() {
-            Ok(p) => p,
-            Err(_) => return "No configuration found".to_string(),
-        };
+        let config_path = config::paths::config_file();
 
         if !config_path.exists() {
             return "No configuration found".to_string();
         }
 
-        match config::Config::load(Some(&config_path)) {
+        match config::Config::load() {
             Ok(cfg) => {
                 let count = cfg.instruments.len();
                 if count == 0 {
@@ -333,7 +322,7 @@ impl TrayApp {
     }
 
     fn open_config(&self) -> Result<()> {
-        let config_path = config::paths::config_file()?;
+        let config_path = config::paths::config_file();
         if config_path.exists() {
             // Open with default text editor
             std::process::Command::new("notepad")
@@ -341,7 +330,8 @@ impl TrayApp {
                 .spawn()?;
         } else {
             // Open the config directory
-            let config_dir = config::paths::config_dir()?;
+            let config_dir = config::paths::data_dir();
+            std::fs::create_dir_all(&config_dir)?;
             std::process::Command::new("explorer")
                 .arg(&config_dir)
                 .spawn()?;
@@ -360,9 +350,9 @@ impl TrayApp {
 
     fn open_template(&self) -> Result<()> {
         // Try to load config and find template path
-        let config_path = config::paths::config_file()?;
+        let config_path = config::paths::config_file();
         if config_path.exists() {
-            if let Ok(cfg) = config::Config::load(Some(&config_path)) {
+            if let Ok(cfg) = config::Config::load() {
                 // Get the first instrument's template
                 if let Some(instrument) = cfg.instruments.first() {
                     let template_path = std::path::Path::new(&instrument.template);
@@ -398,9 +388,9 @@ impl TrayApp {
 
     fn open_data_folder(&self) -> Result<()> {
         // Try to load config and find watch path
-        let config_path = config::paths::config_file()?;
+        let config_path = config::paths::config_file();
         if config_path.exists() {
-            if let Ok(cfg) = config::Config::load(Some(&config_path)) {
+            if let Ok(cfg) = config::Config::load() {
                 // Get the first instrument's watch path
                 if let Some(instrument) = cfg.instruments.first() {
                     let watch_path = std::path::Path::new(&instrument.watch_path);
