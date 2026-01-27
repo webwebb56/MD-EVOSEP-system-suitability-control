@@ -1,172 +1,294 @@
 # MD Local QC Agent
 
-A passive, vendor-agnostic telemetry service that extracts EvoSep-aligned system-suitability signals from completed MS runs using Skyline headlessly.
+**Automated quality control monitoring for mass spectrometry instruments**
 
-## Overview
+Monitor your instrument performance over time by automatically tracking key metrics from QC runs. The agent watches for new QC files, extracts performance data using Skyline, and uploads results to Mass Dynamics for visualization and alerting.
 
-The MD Local QC Agent monitors mass spectrometry instruments for completed QC runs, extracts targeted metrics using Skyline, and uploads derived QC data to the Mass Dynamics cloud for longitudinal system-suitability monitoring.
+## What Does It Do?
 
-**Key Features:**
-- Vendor-agnostic file detection (Thermo, Bruker, Sciex, Waters, Agilent)
-- EvoSep kit control alignment (SSC0, QC_A, QC_B)
-- Headless Skyline extraction
-- Reliable local spooling with offline support
-- Secure cloud upload with mTLS
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  Instrument     │    │   QC Agent      │    │    Skyline      │    │ Mass Dynamics   │
+│  completes run  │───▶│   detects file  │───▶│   extracts      │───▶│   tracks &      │
+│                 │    │                 │    │   metrics       │    │   alerts        │
+└─────────────────┘    └─────────────────┘    └─────────────────┘    └─────────────────┘
+```
 
-## Installation
+**The agent automatically:**
+- Detects when QC runs complete on your instrument
+- Identifies the control type from the filename (SSC0, QC_A, QC_B)
+- Runs Skyline to extract retention times, peak areas, and mass accuracy
+- Uploads metrics to Mass Dynamics for trend monitoring
+- Works offline and syncs when connection is restored
 
-### Prerequisites
+## Supported Instruments
 
-1. **Windows 10/11 or Windows Server 2016+** (x64)
-2. **Skyline** - Download from [skyline.ms](https://skyline.ms)
-3. **Vendor raw file readers** - Required for the vendors you want to support
+| Vendor | File Format | Status |
+|--------|-------------|--------|
+| Thermo | `.raw` | Supported |
+| Bruker | `.d` | Supported |
+| Sciex | `.wiff` | Supported |
+| Waters | `.raw` (folder) | Supported |
+| Agilent | `.d` | Supported |
 
-### Install
+## Quick Start
+
+### 1. Install Prerequisites
+
+**Skyline** (free, required for data extraction):
+- Download from [skyline.ms](https://skyline.ms/project/home/software/Skyline/begin.view)
+- Run the installer - no configuration needed
+
+**Vendor Libraries** (for your instrument type):
+- Thermo: Included with Skyline
+- Bruker: Install timsdata library from Bruker
+- Others: See [Skyline documentation](https://skyline.ms/wiki/home/software/Skyline/page.view?name=InstallExternalTools)
+
+### 2. Install the QC Agent
+
+Download the latest release and run:
 
 ```powershell
-# Download the latest MSI
-# Run the installer
-msiexec /i MassDynamicsQC.msi
+# Standard install
+.\mdqc-setup.exe
 
-# Or for silent install
-msiexec /i MassDynamicsQC.msi /qn
+# Or silent install
+.\mdqc-setup.exe /S
 ```
 
-### Configuration
+### 3. Configure Your Instrument
 
-1. Copy the example configuration:
-   ```powershell
-   Copy-Item "C:\Program Files\MassDynamics\QC\config.example.toml" `
-             "C:\ProgramData\MassDynamics\QC\config.toml"
-   ```
+Edit the configuration file at `C:\ProgramData\MassDynamics\QC\config.toml`:
 
-2. Edit the configuration to add your instruments:
-   ```toml
-   [[instruments]]
-   id = "TIMSTOF01"
-   vendor = "bruker"
-   watch_path = "D:\\Data\\TIMSTOF01"
-   file_pattern = "*.d"
-   template = "evosep_hela_qc_v1.sky"
-   ```
-
-3. Place your Skyline template in:
-   ```
-   C:\ProgramData\MassDynamics\QC\templates\evosep_hela_qc_v1.sky
-   ```
-
-4. Run the doctor command to verify setup:
-   ```powershell
-   mdqc doctor
-   ```
-
-## Usage
-
-### Commands
-
-```
-mdqc run              Run the agent (normally as service)
-mdqc run --foreground Run in foreground for testing
-mdqc doctor           Check system health
-mdqc classify <path>  Preview run classification
-mdqc status           Show agent status
-mdqc baseline list    List baselines
-mdqc config validate  Validate configuration
+```toml
+# Add your instrument
+[[instruments]]
+id = "MY_INSTRUMENT"           # A name for your instrument
+vendor = "thermo"              # thermo, bruker, sciex, waters, or agilent
+watch_path = "D:\\Data"        # Where your raw files are saved
+file_pattern = "*.raw"         # File extension to watch
+template = "qc_template.sky"   # Your Skyline template (see below)
 ```
 
-### Running as a Service
+### 4. Create a Skyline Template
 
-The installer automatically creates and starts the Windows service. To manage manually:
+The agent needs a Skyline document with your QC targets (e.g., iRT peptides):
+
+1. Open Skyline
+2. Add your QC peptides/targets
+3. Configure extraction settings for your acquisition method (DDA/DIA)
+4. Save as `C:\ProgramData\MassDynamics\QC\templates\qc_template.sky`
+
+### 5. Verify Setup
 
 ```powershell
-# Start the service
-Start-Service MassDynamicsQC
-
-# Stop the service
-Stop-Service MassDynamicsQC
-
-# Check status
-Get-Service MassDynamicsQC
+mdqc doctor
 ```
 
-### File Naming Convention
+You should see all green checkmarks. If not, see [Troubleshooting](#troubleshooting).
 
-For automatic classification, name your QC files following this pattern:
+### 6. Start Monitoring
 
+The agent runs automatically as a Windows service. To check status:
+
+```powershell
+mdqc status
 ```
-{INSTRUMENT}_{CONTROL_TYPE}_{WELL}_{DATE}.{ext}
+
+## QC Control Types
+
+The agent recognizes EvoSep kit controls by filename:
+
+| Control | Filename Contains | Purpose |
+|---------|-------------------|---------|
+| **SSC0** | `SSC0` or `SSC` | System Suitability Control - establishes baseline performance |
+| **QC_A** | `QCA` or `QC_A` | 500ng HeLa lysate - full workflow check |
+| **QC_B** | `QCB` or `QC_B` | 50ng HeLa digest - sensitivity check |
+| **Blank** | `BLANK` or `BLK` | Carryover monitoring |
+
+**Recommended naming:**
+```
+INSTRUMENT_CONTROLTYPE_WELL_DATE.raw
 
 Examples:
-TIMSTOF01_SSC0_A1_2026-01-27.d
-EXPLORIS01_QCB_A3_2026-01-27.raw
+EXPLORIS01_SSC0_A1_2026-01-27.raw
+TIMSTOF01_QCA_B3_2026-01-27.d
 ```
 
-Control types:
-- `SSC0` - System Suitability Control (baseline)
-- `QCA` - 500ng lysate full workflow
-- `QCB` - 50ng digest LCMS + loading
+## Configuration Reference
 
-## Development
+### Full Configuration Example
 
-### Building
+```toml
+[agent]
+agent_id = "auto"                    # Unique ID (auto-generates from hardware)
+log_level = "info"                   # error, warn, info, debug
+
+[cloud]
+endpoint = "https://qc.massdynamics.com/api/"
+api_token = "your-token-here"        # From Mass Dynamics account
+
+[skyline]
+path = "auto"                        # Auto-detect Skyline installation
+timeout_seconds = 300                # Max time for extraction
+process_priority = "below_normal"    # Don't interfere with acquisition
+
+[watcher]
+scan_interval_seconds = 30           # How often to check for new files
+stability_window_seconds = 60        # Wait for file to stop changing
+
+[[instruments]]
+id = "EXPLORIS01"
+vendor = "thermo"
+watch_path = "D:\\Data\\Exploris"
+file_pattern = "*.raw"
+template = "orbitrap_qc.sky"
+
+[[instruments]]
+id = "TIMSTOF01"
+vendor = "bruker"
+watch_path = "D:\\Data\\timsTOF"
+file_pattern = "*.d"
+template = "tims_qc.sky"
+```
+
+### Multiple Instruments
+
+Add multiple `[[instruments]]` sections to monitor several instruments from one PC:
+
+```toml
+[[instruments]]
+id = "EXPLORIS01"
+vendor = "thermo"
+watch_path = "\\\\server\\data\\Exploris01"
+template = "orbitrap_qc.sky"
+
+[[instruments]]
+id = "EXPLORIS02"
+vendor = "thermo"
+watch_path = "\\\\server\\data\\Exploris02"
+template = "orbitrap_qc.sky"
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `mdqc doctor` | Check system health and configuration |
+| `mdqc status` | Show current queue and recent activity |
+| `mdqc classify <file>` | Preview how a file would be classified |
+| `mdqc run --foreground` | Run in foreground (for testing) |
+| `mdqc config validate` | Check configuration file for errors |
+
+## Troubleshooting
+
+### "Skyline not found"
+
+The agent couldn't locate SkylineCmd.exe. Either:
+- Install Skyline from [skyline.ms](https://skyline.ms)
+- Or specify the path manually in config:
+  ```toml
+  [skyline]
+  path = "C:\\Program Files\\Skyline\\SkylineCmd.exe"
+  ```
+
+### "Template not found"
+
+Ensure your Skyline template exists at the path specified. Templates should be in:
+```
+C:\ProgramData\MassDynamics\QC\templates\
+```
+
+### "Vendor reader not detected"
+
+Skyline needs vendor-specific libraries to read raw files:
+- **Thermo**: Usually included with Skyline
+- **Bruker**: Download timsdata.dll from Bruker
+- **Waters**: Install MassLynx or waters_connect
+
+Run `mdqc doctor` to see which readers are available.
+
+### Files Not Being Detected
+
+1. Check the watch path exists and is accessible
+2. Verify the file pattern matches your files (e.g., `*.raw` vs `*.d`)
+3. Ensure files are fully written before the agent checks (increase `stability_window_seconds`)
+4. Check logs at `C:\ProgramData\MassDynamics\QC\logs\`
+
+### Upload Failures
+
+The agent queues data locally when offline. Check:
+- Network connectivity to Mass Dynamics
+- API token is valid
+- Run `mdqc status` to see pending uploads
+
+## Logs
+
+Logs are stored at:
+```
+C:\ProgramData\MassDynamics\QC\logs\mdqc.log
+```
+
+Increase verbosity in config:
+```toml
+[agent]
+log_level = "debug"
+```
+
+## Service Management
+
+The agent runs as a Windows service:
+
+```powershell
+# Check status
+Get-Service MassDynamicsQC
+
+# Restart
+Restart-Service MassDynamicsQC
+
+# Stop
+Stop-Service MassDynamicsQC
+
+# View logs
+Get-Content C:\ProgramData\MassDynamics\QC\logs\mdqc.log -Tail 50
+```
+
+## For Developers
+
+### Building from Source
 
 ```bash
-# Clone the repository
-git clone https://github.com/MassDynamics/mdqc-agent.git
+# Clone
+git clone https://github.com/webwebb56/MD-EVOSEP-system-suitability-control.git
 cd mdqc-agent
 
-# Build (debug)
-cargo build
-
-# Build (release)
+# Build
 cargo build --release
 
-# Run tests
+# Test
 cargo test
-```
-
-### Cross-Platform Development
-
-The agent is designed to run on Windows but can be developed on macOS/Linux:
-
-```bash
-# Build for Windows from macOS (requires cross-compilation setup)
-cargo build --target x86_64-pc-windows-msvc
-
-# Or use GitHub Actions for Windows builds
 ```
 
 ### Project Structure
 
 ```
-mdqc-agent/
-├── src/
-│   ├── main.rs           # Entry point
-│   ├── cli/              # CLI commands
-│   ├── config/           # Configuration management
-│   ├── watcher/          # File detection & finalization
-│   ├── classifier/       # Run classification
-│   ├── extractor/        # Skyline extraction
-│   ├── spool/            # Local reliability layer
-│   ├── uploader/         # Cloud upload
-│   ├── baseline/         # Baseline management
-│   ├── metrics/          # Metrics computation
-│   └── service/          # Windows service integration
-├── Cargo.toml
-├── config.example.toml
-└── README.md
+src/
+├── cli/          # Command-line interface
+├── config/       # Configuration loading
+├── watcher/      # File detection
+├── classifier/   # Control type identification
+├── extractor/    # Skyline integration
+├── spool/        # Offline queue
+├── uploader/     # Cloud sync
+└── baseline/     # Baseline management
 ```
-
-## License
-
-Apache 2.0
-
-## Contributing
-
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
 
 ## Support
 
-- Documentation: https://docs.massdynamics.com/qc-agent
-- Issues: https://github.com/MassDynamics/mdqc-agent/issues
-- Email: support@massdynamics.com
+- **Documentation**: [docs.massdynamics.com](https://docs.massdynamics.com)
+- **Issues**: [GitHub Issues](https://github.com/webwebb56/MD-EVOSEP-system-suitability-control/issues)
+- **Email**: support@massdynamics.com
+
+## License
+
+Apache 2.0 - See [LICENSE](LICENSE) for details.
