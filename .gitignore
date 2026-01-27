@@ -1,0 +1,43 @@
+# Rust
+/target/
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.msi
+
+# Logs
+*.log
+logs/
+
+# Test data
+test_data/
+*.raw
+*.d/
+*.wiff
+
+# Secrets and credentials
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Local config (use config.example.toml as template)
+config.toml
+
+# Spool data
+spool/

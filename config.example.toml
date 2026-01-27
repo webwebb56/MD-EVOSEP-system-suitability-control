@@ -1,0 +1,79 @@
+# MD Local QC Agent Configuration
+# Copy this file to C:\ProgramData\MassDynamics\QC\config.toml (Windows)
+# or ~/.local/share/massdynamics/qc/config.toml (macOS/Linux for development)
+
+[agent]
+# Unique identifier for this agent instance
+# Use "auto" to generate from hardware ID
+agent_id = "auto"
+
+# Log level: error, warn, info, debug, trace
+log_level = "info"
+
+# Enable Windows toast notifications for critical errors
+enable_toast_notifications = false
+
+[cloud]
+# Cloud endpoint URL
+endpoint = "https://qc-ingest.massdynamics.com/v1/"
+
+# Certificate thumbprint (from Windows cert store)
+# Leave commented until enrolled
+# certificate_thumbprint = "A1B2C3D4E5F6..."
+
+# Proxy URL (optional)
+# proxy = "http://proxy.corp.local:8080"
+
+[skyline]
+# Path to SkylineCmd.exe (optional, will auto-discover)
+# path = "C:\\Program Files\\Skyline\\SkylineCmd.exe"
+
+# Extraction timeout in seconds
+timeout_seconds = 300
+
+# Process priority: normal, below_normal, idle
+process_priority = "below_normal"
+
+[watcher]
+# Enable filesystem event watching
+use_filesystem_events = true
+
+# Fallback scan interval in seconds
+scan_interval_seconds = 30
+
+# Stability window before processing in seconds
+stability_window_seconds = 60
+
+# Maximum stabilization wait in seconds
+stabilization_timeout_seconds = 600
+
+[spool]
+# Maximum pending spool size in MB
+max_pending_mb = 1000
+
+# Maximum age of spooled items in days
+max_age_days = 30
+
+# Number of completed items to retain for debugging
+completed_retention_count = 10
+
+# Instrument configurations
+# Add one [[instruments]] section for each instrument to monitor
+
+[[instruments]]
+id = "TIMSTOF01"
+vendor = "bruker"
+watch_path = "D:\\Data\\TIMSTOF01"
+file_pattern = "*.d"
+template = "evosep_hela_qc_v1.sky"
+
+# Optional: vendor-specific watcher overrides
+# [instruments.watcher_overrides]
+# stability_window_seconds = 90
+
+# [[instruments]]
+# id = "EXPLORIS01"
+# vendor = "thermo"
+# watch_path = "D:\\Data\\Exploris"
+# file_pattern = "*.raw"
+# template = "evosep_hela_qc_v1.sky"
