@@ -35,8 +35,8 @@ notify-debouncer-mini = "0.4"
 thiserror = "1.0"
 anyhow = "1.0"
 
-# HTTP client
-reqwest = { version = "0.11", features = ["json", "rustls-tls", "stream"] }
+# HTTP client (native-tls needed for Windows cert store / PKCS12 support)
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "native-tls", "stream"] }
 
 # Cryptography and hashing
 sha2 = "0.10"
