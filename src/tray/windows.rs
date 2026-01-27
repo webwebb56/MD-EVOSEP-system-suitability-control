@@ -583,7 +583,6 @@ fn find_skyline() -> Option<std::path::PathBuf> {
 fn show_message_box(title: &str, message: &str, is_error: bool) {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    use std::ptr::null_mut;
 
     // Convert strings to wide strings for Windows API
     let title_wide: Vec<u16> = OsStr::new(title).encode_wide().chain(Some(0)).collect();
@@ -594,7 +593,7 @@ fn show_message_box(title: &str, message: &str, is_error: bool) {
 
     unsafe {
         windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW(
-            null_mut(),
+            0, // HWND is isize, 0 = no parent window
             message_wide.as_ptr(),
             title_wide.as_ptr(),
             flags,
@@ -606,7 +605,7 @@ fn show_message_box(title: &str, message: &str, is_error: bool) {
 fn check_single_instance() -> Option<SingleInstanceGuard> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
-    use std::ptr::null_mut;
+    use std::ptr::null;
 
     let mutex_name: Vec<u16> = OsStr::new(SINGLE_INSTANCE_MUTEX)
         .encode_wide()
@@ -615,12 +614,13 @@ fn check_single_instance() -> Option<SingleInstanceGuard> {
 
     unsafe {
         let handle = windows_sys::Win32::System::Threading::CreateMutexW(
-            null_mut(),
-            1, // bInitialOwner = TRUE
+            null(), // SECURITY_ATTRIBUTES pointer
+            1,      // bInitialOwner = TRUE
             mutex_name.as_ptr(),
         );
 
-        if handle.is_null() {
+        // HANDLE is isize, 0 means failure
+        if handle == 0 {
             return None;
         }
 
