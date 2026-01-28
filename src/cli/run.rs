@@ -8,6 +8,7 @@ use tracing::{error, info, warn};
 use crate::classifier::Classifier;
 use crate::config::Config;
 use crate::extractor::Extractor;
+use crate::failed_files::FailedFiles;
 use crate::spool::Spool;
 use crate::types::TrackedFile;
 use crate::uploader::Uploader;
@@ -78,6 +79,7 @@ fn resolve_agent_id(config: &Config) -> String {
 pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> Result<()> {
     // Initialize components
     let spool = Spool::new(&config.spool)?;
+    let failed_files = FailedFiles::new();
 
     // Set agent ID
     let agent_id = resolve_agent_id(&config);
@@ -149,6 +151,11 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                     Ok(c) => c,
                     Err(e) => {
                         warn!(path = ?file_path, error = %e, "Classification failed");
+                        failed_files.record_failure(
+                            file_path.clone(),
+                            instrument.id.clone(),
+                            format!("Classification failed: {}", e),
+                        );
                         if let Some(w) = watcher {
                             w.mark_failed(&file_path);
                         }
@@ -188,6 +195,11 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                         // Spool for upload (pass vendor from instrument config)
                         if let Err(e) = spool.enqueue(&result, &classification, instrument.vendor).await {
                             error!(path = ?file_path, error = %e, "Failed to spool result");
+                            failed_files.record_failure(
+                                file_path.clone(),
+                                instrument.id.clone(),
+                                format!("Failed to spool result: {}", e),
+                            );
                             if let Some(w) = watcher {
                                 w.mark_failed(&file_path);
                             }
@@ -197,10 +209,14 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                     }
                     Err(e) => {
                         error!(path = ?file_path, error = %e, "Extraction failed");
+                        failed_files.record_failure(
+                            file_path.clone(),
+                            instrument.id.clone(),
+                            format!("Skyline extraction failed: {}", e),
+                        );
                         if let Some(w) = watcher {
                             w.mark_failed(&file_path);
                         }
-                        // TODO: Spool error record for cloud notification
                     }
                 }
             }

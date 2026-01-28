@@ -34,11 +34,27 @@ def generate_random_data(size_bytes: int) -> bytes:
     return os.urandom(size_bytes)
 
 
-def generate_run_name(prefix: str = "QC") -> str:
-    """Generate a realistic run name with timestamp."""
+def generate_run_name(prefix: str = "TEST", control_type: str = None, well: str = None) -> str:
+    """Generate a realistic run name with timestamp.
+
+    Args:
+        prefix: Instrument or test prefix (e.g., "INST01", "TEST")
+        control_type: QC control type - "SSC0", "QCA", "QCB", "BLANK", or None for SAMPLE
+        well: Well position (e.g., "A1", "A3") or None
+
+    Returns:
+        Filename like: INST01_QCA_A1_20260129_143052
+    """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
-    return f"{prefix}_{timestamp}_{random_suffix}"
+
+    parts = [prefix]
+    if control_type:
+        parts.append(control_type.upper())
+    if well:
+        parts.append(well.upper())
+    parts.append(timestamp)
+
+    return "_".join(parts)
 
 
 class AcquisitionSimulator:
@@ -268,7 +284,9 @@ def monitor_agent_response(watch_folder: Path, file_path: Path, timeout: int = 1
     return False
 
 
-def run_test_suite(watch_folder: Path, vendors: list, duration: int, cleanup: bool):
+def run_test_suite(watch_folder: Path, vendors: list, duration: int, cleanup: bool,
+                   control_type: str = None, well: str = None, prefix: str = "TEST",
+                   run_name: str = None):
     """Run a complete test suite for specified vendors."""
     print("=" * 60)
     print("MD QC Agent Test Harness")
@@ -276,6 +294,10 @@ def run_test_suite(watch_folder: Path, vendors: list, duration: int, cleanup: bo
     print(f"Watch folder: {watch_folder}")
     print(f"Vendors to test: {', '.join(vendors)}")
     print(f"Acquisition duration: {duration}s")
+    if control_type:
+        print(f"Control type: {control_type.upper()}")
+    if well:
+        print(f"Well position: {well.upper()}")
     print(f"Cleanup after test: {cleanup}")
     print("=" * 60)
 
@@ -286,8 +308,15 @@ def run_test_suite(watch_folder: Path, vendors: list, duration: int, cleanup: bo
     simulators = []
 
     for vendor in vendors:
-        run_name = generate_run_name(f"TEST_{vendor.upper()}")
-        simulator = get_simulator(vendor, watch_folder, run_name)
+        if run_name:
+            name = run_name
+        else:
+            name = generate_run_name(
+                prefix=f"{prefix}_{vendor.upper()}",
+                control_type=control_type if control_type and control_type.upper() != 'SAMPLE' else None,
+                well=well
+            )
+        simulator = get_simulator(vendor, watch_folder, name)
         simulators.append(simulator)
 
         try:
@@ -401,6 +430,28 @@ Examples:
         help='Custom run name (default: auto-generated with timestamp)'
     )
 
+    parser.add_argument(
+        '--control-type', '-t',
+        type=str,
+        choices=['SSC0', 'QCA', 'QCB', 'BLANK', 'SAMPLE', 'ssc0', 'qca', 'qcb', 'blank', 'sample'],
+        default=None,
+        help='QC control type for filename (SSC0, QCA, QCB, BLANK, or SAMPLE for no QC marker)'
+    )
+
+    parser.add_argument(
+        '--well', '-W',
+        type=str,
+        default=None,
+        help='Well position (e.g., A1, A3, B5)'
+    )
+
+    parser.add_argument(
+        '--prefix', '-p',
+        type=str,
+        default='TEST',
+        help='Instrument/test prefix for filename (default: TEST)'
+    )
+
     args = parser.parse_args()
 
     if args.test_timeout:
@@ -433,6 +484,10 @@ Examples:
         vendors=args.vendor,
         duration=args.duration,
         cleanup=args.cleanup,
+        control_type=args.control_type,
+        well=args.well,
+        prefix=args.prefix,
+        run_name=args.run_name,
     )
 
 
