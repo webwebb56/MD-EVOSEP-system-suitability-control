@@ -358,44 +358,32 @@ impl TrayApp {
     }
 
     fn handle_menu_event(&self, event: MenuEvent) {
-        match event.id.0.as_str() {
-            menu_ids::OPEN_CONFIG => {
-                if let Err(e) = self.open_config() {
-                    eprintln!("Failed to open config: {}", e);
-                }
-            }
-            menu_ids::OPEN_LOGS => {
-                if let Err(e) = self.open_logs() {
-                    eprintln!("Failed to open logs: {}", e);
-                }
-            }
-            menu_ids::OPEN_TEMPLATE => {
-                if let Err(e) = self.open_template() {
-                    eprintln!("Failed to open template: {}", e);
-                }
-            }
-            menu_ids::OPEN_DATA_FOLDER => {
-                if let Err(e) = self.open_data_folder() {
-                    eprintln!("Failed to open data folder: {}", e);
-                }
-            }
-            menu_ids::DOCTOR => {
-                if let Err(e) = self.run_doctor() {
-                    eprintln!("Failed to run doctor: {}", e);
-                }
-            }
-            menu_ids::FAILED_FILES => {
-                if let Err(e) = self.view_failed_files() {
-                    eprintln!("Failed to view failed files: {}", e);
-                }
-            }
+        let id = event.id.0.as_str();
+
+        let result: Result<()> = match id {
+            menu_ids::OPEN_CONFIG => self.open_config(),
+            menu_ids::OPEN_LOGS => self.open_logs(),
+            menu_ids::OPEN_TEMPLATE => self.open_template(),
+            menu_ids::OPEN_DATA_FOLDER => self.open_data_folder(),
+            menu_ids::DOCTOR => self.run_doctor(),
+            menu_ids::FAILED_FILES => self.view_failed_files(),
             menu_ids::CHECK_UPDATES => {
                 open_url(RELEASES_URL);
+                Ok(())
             }
             menu_ids::EXIT => {
                 self.running.store(false, Ordering::SeqCst);
+                Ok(())
             }
-            _ => {}
+            _ => Ok(()),
+        };
+
+        if let Err(e) = result {
+            show_message_box(
+                "MD QC Agent - Error",
+                &format!("Failed to handle menu action '{}':\n\n{}", id, e),
+                true,
+            );
         }
     }
 
@@ -626,18 +614,22 @@ impl ApplicationHandler for TrayApp {
     }
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        // Process menu events
-        if let Ok(event) = MenuEvent::receiver().try_recv() {
+        // Process all pending menu events
+        while let Ok(event) = MenuEvent::receiver().try_recv() {
             self.handle_menu_event(event);
         }
 
         // Check if we should exit
         if !self.running.load(Ordering::SeqCst) {
             event_loop.exit();
+            return;
         }
 
-        // Keep running
-        event_loop.set_control_flow(ControlFlow::Wait);
+        // Use a short timeout to poll for menu events periodically
+        // Menu events come through a separate channel and don't wake the event loop
+        event_loop.set_control_flow(ControlFlow::WaitUntil(
+            std::time::Instant::now() + std::time::Duration::from_millis(100),
+        ));
     }
 }
 
