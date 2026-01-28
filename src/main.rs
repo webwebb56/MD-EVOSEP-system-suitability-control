@@ -77,6 +77,14 @@ async fn real_main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // Hide console window for tray and GUI commands (they don't need it)
+    #[cfg(windows)]
+    if matches!(cli.command, Command::Tray | Command::Gui) {
+        unsafe {
+            windows_sys::Win32::System::Console::FreeConsole();
+        }
+    }
+
     // Initialize logging based on command
     // Run and Tray use file logging; GUI has no logging; other commands use console
     let _guard = match &cli.command {
