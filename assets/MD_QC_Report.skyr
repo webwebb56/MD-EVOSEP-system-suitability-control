@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ReportSpecList>
+  <report name="MD_QC_Report">
+    <table name="Transition">
+      <column name="ProteinName" />
+      <column name="PeptideSequence" />
+      <column name="PrecursorMz" />
+      <column name="ProductMz" />
+      <column name="RetentionTime" />
+      <column name="BestRetentionTime" />
+      <column name="TotalArea" />
+      <column name="TotalAreaNormalized" />
+      <column name="MaxHeight" />
+      <column name="Fwhm" />
+      <column name="FwhmDegenerate" />
+      <column name="MassErrorPPM" />
+      <column name="IsotopeDotProduct" />
+      <column name="LibraryDotProduct" />
+    </table>
+  </report>
+</ReportSpecList>

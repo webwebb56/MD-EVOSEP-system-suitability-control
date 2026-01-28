@@ -61,9 +61,17 @@ impl Extractor {
             ));
         }
 
-        // Get template path
-        let template_dir = crate::config::paths::template_dir();
-        let template_path = template_dir.join(&instrument.template);
+        // Get template path - use absolute path if provided, otherwise look in template dir
+        let template_path = {
+            let path = PathBuf::from(&instrument.template);
+            if path.is_absolute() && path.exists() {
+                path
+            } else {
+                // Try relative to template directory
+                let template_dir = crate::config::paths::template_dir();
+                template_dir.join(&instrument.template)
+            }
+        };
 
         if !template_path.exists() {
             return Err(ExtractionError::TemplateNotFound(
@@ -91,6 +99,15 @@ impl Extractor {
 
         let start = Instant::now();
 
+        // Ensure report definition exists in work directory
+        let report_def_path = work_dir.join("MD_QC_Report.skyr");
+        if !report_def_path.exists() {
+            // Write embedded report definition
+            const REPORT_DEF: &str = include_str!("../../assets/MD_QC_Report.skyr");
+            std::fs::write(&report_def_path, REPORT_DEF)
+                .map_err(|e| ExtractionError::SkylineExecution(format!("Failed to write report definition: {}", e)))?;
+        }
+
         // Build Skyline command
         let mut cmd = Command::new(skyline_path);
         cmd.current_dir(&work_dir) // Set working directory to spool/work
@@ -98,6 +115,10 @@ impl Extractor {
             .arg(&template_path)
             .arg("--import-file")
             .arg(raw_path)
+            .arg("--report-add")
+            .arg(&report_def_path)
+            .arg("--report-conflict-resolution")
+            .arg("overwrite")
             .arg("--report-name")
             .arg("MD_QC_Report")
             .arg("--report-file")
@@ -138,8 +159,25 @@ impl Extractor {
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            error!(stderr = %stderr, "Skyline extraction failed");
-            return Err(ExtractionError::SkylineExecution(stderr.to_string()));
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let exit_code = output.status.code().unwrap_or(-1);
+
+            // Skyline often writes errors to stdout, not stderr
+            let error_msg = if !stderr.is_empty() {
+                stderr.to_string()
+            } else if !stdout.is_empty() {
+                stdout.to_string()
+            } else {
+                format!("Skyline exited with code {}", exit_code)
+            };
+
+            error!(
+                stderr = %stderr,
+                stdout = %stdout,
+                exit_code = exit_code,
+                "Skyline extraction failed"
+            );
+            return Err(ExtractionError::SkylineExecution(error_msg));
         }
 
         // Parse the report
