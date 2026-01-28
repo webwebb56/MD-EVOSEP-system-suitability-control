@@ -6,6 +6,7 @@ pub mod baseline;
 pub mod classify;
 pub mod config;
 pub mod doctor;
+pub mod failed;
 pub mod run;
 pub mod status;
 
@@ -80,6 +81,12 @@ pub enum Command {
         action: ConfigAction,
     },
 
+    /// Manage failed files
+    Failed {
+        #[command(subcommand)]
+        action: FailedAction,
+    },
+
     /// Run system tray icon (Windows only)
     Tray,
 
@@ -127,4 +134,23 @@ pub enum ConfigAction {
 
     /// Show configuration file path
     Path,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum FailedAction {
+    /// List all failed files
+    List,
+
+    /// Retry processing a failed file
+    Retry {
+        /// Path to the file to retry (or "all" to retry all)
+        path: String,
+    },
+
+    /// Clear all failed files from the list
+    Clear {
+        /// Skip confirmation prompt
+        #[arg(long)]
+        confirm: bool,
+    },
 }

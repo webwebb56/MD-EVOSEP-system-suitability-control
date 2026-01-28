@@ -14,6 +14,7 @@ mod config;
 mod crash;
 mod error;
 mod extractor;
+mod failed_files;
 #[cfg(windows)]
 mod gui;
 mod metrics;
@@ -119,6 +120,7 @@ async fn real_main() -> Result<()> {
         Command::Status => cli::status::run().await,
         Command::Baseline { action } => cli::baseline::run(action).await,
         Command::Config { action } => cli::config::run(action).await,
+        Command::Failed { action } => cli::failed::run(action).await,
         Command::Tray => tray::run_tray().await,
         Command::Gui => {
             #[cfg(windows)]

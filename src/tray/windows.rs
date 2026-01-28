@@ -28,6 +28,7 @@ mod menu_ids {
     pub const STATUS: &str = "status";
     pub const HEALTH_STATUS: &str = "health_status";
     pub const INSTRUMENT_COUNT: &str = "instrument_count";
+    pub const FAILED_FILES: &str = "failed_files";
     pub const OPEN_CONFIG: &str = "open_config";
     pub const OPEN_LOGS: &str = "open_logs";
     pub const OPEN_TEMPLATE: &str = "open_template";
@@ -280,6 +281,16 @@ impl TrayApp {
         let logs_item = MenuItem::with_id(menu_ids::OPEN_LOGS, "View Logs...", true, None);
         menu.append(&logs_item)?;
 
+        // Failed files (show count if any)
+        let failed_count = crate::failed_files::FailedFiles::new().count();
+        let failed_text = if failed_count > 0 {
+            format!("View Failed Files ({})...", failed_count)
+        } else {
+            "View Failed Files...".to_string()
+        };
+        let failed_item = MenuItem::with_id(menu_ids::FAILED_FILES, &failed_text, true, None);
+        menu.append(&failed_item)?;
+
         menu.append(&PredefinedMenuItem::separator())?;
 
         // Diagnostics
@@ -371,6 +382,11 @@ impl TrayApp {
             menu_ids::DOCTOR => {
                 if let Err(e) = self.run_doctor() {
                     eprintln!("Failed to run doctor: {}", e);
+                }
+            }
+            menu_ids::FAILED_FILES => {
+                if let Err(e) = self.view_failed_files() {
+                    eprintln!("Failed to view failed files: {}", e);
                 }
             }
             menu_ids::CHECK_UPDATES => {
@@ -478,6 +494,24 @@ impl TrayApp {
                 "/k",
                 exe_path.to_str().unwrap_or("mdqc"),
                 "doctor",
+            ])
+            .spawn()?;
+        Ok(())
+    }
+
+    fn view_failed_files(&self) -> Result<()> {
+        // Open a command prompt and run mdqc failed list
+        let exe_path = std::env::current_exe()?;
+        std::process::Command::new("cmd")
+            .args([
+                "/c",
+                "start",
+                "MD QC Failed Files",
+                "cmd",
+                "/k",
+                exe_path.to_str().unwrap_or("mdqc"),
+                "failed",
+                "list",
             ])
             .spawn()?;
         Ok(())

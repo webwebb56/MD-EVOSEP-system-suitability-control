@@ -1,6 +1,6 @@
 [package]
 name = "mdqc-agent"
-version = "0.4.4"
+version = "0.4.5"
 edition = "2021"
 authors = ["Mass Dynamics <engineering@massdynamics.com>"]
 description = "MD Local QC Agent - System suitability monitoring for mass spectrometry"
@@ -69,6 +69,9 @@ async-channel = "2.1"
 
 # Retry logic
 backoff = { version = "0.4", features = ["tokio"] }
+
+# File time manipulation (for retry functionality)
+filetime = "0.2"
 
 # Windows-specific dependencies
 [target.'cfg(windows)'.dependencies]

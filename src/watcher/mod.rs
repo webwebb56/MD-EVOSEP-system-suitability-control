@@ -19,6 +19,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, error, info, trace, warn};
 
 use crate::config::{InstrumentConfig, WatcherConfig};
+use crate::failed_files::FailedFiles;
 use crate::types::{FinalizationState, TrackedFile, Vendor};
 
 mod finalizer;
@@ -147,9 +148,18 @@ impl Watcher {
         let config = self.config.clone();
         let instrument_id = self.instrument.id.clone();
         let running = Arc::clone(&self.running);
+        let failed_files = FailedFiles::new();
 
         tokio::spawn(async move {
-            run_finalization_loop(tracked_files, ready_tx, config, instrument_id, running).await
+            run_finalization_loop(
+                tracked_files,
+                ready_tx,
+                config,
+                instrument_id,
+                running,
+                failed_files,
+            )
+            .await
         });
 
         // Start the scan loop (always runs as fallback/supplement)
@@ -409,6 +419,7 @@ async fn run_finalization_loop(
     config: WatcherConfig,
     instrument_id: String,
     running: Arc<Mutex<bool>>,
+    failed_files: FailedFiles,
 ) {
     let check_interval = tokio::time::Duration::from_secs(5);
     let mut interval = tokio::time::interval(check_interval);
@@ -425,6 +436,7 @@ async fn run_finalization_loop(
 
         let mut to_remove = Vec::new();
         let mut to_ready = Vec::new();
+        let mut to_record_failed: Vec<(PathBuf, String)> = Vec::new();
 
         {
             let mut tracked = tracked_files.lock().unwrap();
@@ -451,6 +463,13 @@ async fn run_finalization_loop(
                                 "Stabilization timeout"
                             );
                             file.state = FinalizationState::Failed;
+                            to_record_failed.push((
+                                path.clone(),
+                                format!(
+                                    "Stabilization timeout after {} seconds",
+                                    config.stabilization_timeout_seconds
+                                ),
+                            ));
                             continue;
                         }
 
@@ -521,6 +540,10 @@ async fn run_finalization_loop(
                                     "Processing timeout - marking as failed"
                                 );
                                 file.state = FinalizationState::Failed;
+                                to_record_failed.push((
+                                    path.clone(),
+                                    "Processing timeout after 30 minutes".to_string(),
+                                ));
                             }
                         }
                     }
@@ -555,6 +578,11 @@ async fn run_finalization_loop(
                     "Failed to send file to processing queue"
                 );
             }
+        }
+
+        // Record failed files
+        for (path, reason) in to_record_failed {
+            failed_files.record_failure(path, instrument_id.clone(), reason);
         }
 
         // Remove completed/failed files from tracking
