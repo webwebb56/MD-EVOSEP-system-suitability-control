@@ -4,6 +4,12 @@
 
 ### Features Added
 
+#### Windows Toast Notifications
+- Show non-intrusive notifications when extraction completes or fails
+- Displays file name and target count (success) or error message (failure)
+- Enable/disable via `enable_toast_notifications` in config
+- Uses native Windows 10/11 notification system
+
 #### Flexible Skyline Report Parsing
 - Header-based column detection supports various Skyline report formats
 - Recognizes common column name variations (PeptideSequence, Mz, TotalArea, etc.)

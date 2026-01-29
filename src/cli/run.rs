@@ -80,6 +80,7 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
     // Initialize components
     let spool = Spool::new(&config.spool)?;
     let failed_files = FailedFiles::new();
+    let enable_notifications = config.agent.enable_toast_notifications;
 
     // Set agent ID
     let agent_id = resolve_agent_id(&config);
@@ -184,6 +185,12 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                 );
 
                 // Extract metrics
+                let file_name = file_path
+                    .file_name()
+                    .and_then(|f| f.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+
                 match extractor.extract(&file_path, &instrument, &classification).await {
                     Ok(result) => {
                         info!(
@@ -191,6 +198,15 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                             targets_found = result.run_metrics.targets_found,
                             "Extraction complete"
                         );
+
+                        // Show success notification
+                        if enable_notifications {
+                            crate::notifications::notify_extraction_success(
+                                &file_name,
+                                result.run_metrics.targets_found,
+                                result.run_metrics.targets_expected,
+                            );
+                        }
 
                         // Spool for upload (pass vendor from instrument config)
                         if let Err(e) = spool.enqueue(&result, &classification, instrument.vendor).await {
@@ -209,6 +225,15 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                     }
                     Err(e) => {
                         error!(path = ?file_path, error = %e, "Extraction failed");
+
+                        // Show failure notification
+                        if enable_notifications {
+                            crate::notifications::notify_extraction_failure(
+                                &file_name,
+                                &e.to_string(),
+                            );
+                        }
+
                         failed_files.record_failure(
                             file_path.clone(),
                             instrument.id.clone(),

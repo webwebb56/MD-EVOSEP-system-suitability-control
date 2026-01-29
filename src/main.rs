@@ -18,6 +18,7 @@ mod failed_files;
 #[cfg(windows)]
 mod gui;
 mod metrics;
+mod notifications;
 mod service;
 mod spool;
 mod tray;

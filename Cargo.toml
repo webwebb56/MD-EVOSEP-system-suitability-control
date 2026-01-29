@@ -90,6 +90,9 @@ tray-icon = "0.19"
 winit = { version = "0.30", default-features = false, features = ["rwh_06"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
 
+# Toast notifications (Windows)
+winrt-notification = "0.5"
+
 # GUI config editor
 eframe = "0.29"
 rfd = "0.15"  # File dialogs

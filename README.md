@@ -212,6 +212,7 @@ TIMSTOF01_QCA_B3_2026-01-27.d
 [agent]
 agent_id = "auto"                    # Unique ID (auto-generates from hardware)
 log_level = "info"                   # error, warn, info, debug
+enable_toast_notifications = true    # Show Windows notifications for extractions
 
 [cloud]
 endpoint = "https://qc.massdynamics.com/api/"
