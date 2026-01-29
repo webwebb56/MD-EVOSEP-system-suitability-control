@@ -437,21 +437,19 @@ impl TrayApp {
     }
 
     fn run_doctor(&self) -> Result<()> {
-        // Run mdqc doctor in a visible console
+        // Run mdqc doctor in a visible console that stays open
         let exe_path = std::env::current_exe()?;
-        std::process::Command::new(&exe_path)
-            .arg("doctor")
-            .creation_flags(0x00000010) // CREATE_NEW_CONSOLE
+        std::process::Command::new("cmd")
+            .args(["/k", &format!("\"{}\" doctor", exe_path.display())])
             .spawn()?;
         Ok(())
     }
 
     fn view_failed_files(&self) -> Result<()> {
-        // Run mdqc failed list in a visible console
+        // Run mdqc failed list in a visible console that stays open
         let exe_path = std::env::current_exe()?;
-        std::process::Command::new(&exe_path)
-            .args(["failed", "list"])
-            .creation_flags(0x00000010) // CREATE_NEW_CONSOLE
+        std::process::Command::new("cmd")
+            .args(["/k", &format!("\"{}\" failed list", exe_path.display())])
             .spawn()?;
         Ok(())
     }
