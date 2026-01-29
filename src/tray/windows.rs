@@ -410,38 +410,35 @@ impl TrayApp {
             if let Ok(cfg) = config::Config::load() {
                 // Get the first instrument's template
                 if let Some(instrument) = cfg.instruments.first() {
-                    let template_path = std::path::Path::new(&instrument.template);
-                    if template_path.exists() {
-                        // Open with Skyline if available
-                        if let Some(skyline_path) = find_skyline() {
-                            let skyline_exe = skyline_path.with_file_name("Skyline.exe");
-                            if skyline_exe.exists() {
-                                std::process::Command::new(&skyline_exe)
-                                    .arg(template_path)
-                                    .spawn()?;
-                                return Ok(());
+                    if !instrument.template.is_empty() {
+                        let template_path = std::path::Path::new(&instrument.template);
+                        if template_path.exists() {
+                            // Open with Skyline if available
+                            if let Some(skyline_path) = find_skyline() {
+                                let skyline_exe = skyline_path.with_file_name("Skyline.exe");
+                                if skyline_exe.exists() {
+                                    std::process::Command::new(&skyline_exe)
+                                        .arg(template_path)
+                                        .spawn()?;
+                                    return Ok(());
+                                }
                             }
+                            // Fallback: open with explorer (uses default handler)
+                            std::process::Command::new("explorer")
+                                .arg(template_path)
+                                .spawn()?;
+                            return Ok(());
                         }
-                        // Fallback: open with default handler
-                        std::process::Command::new("cmd")
-                            .args([
-                                "/c",
-                                "start",
-                                "\"\"",
-                                &format!("\"{}\"", template_path.display()),
-                            ])
-                            .spawn()?;
-                        return Ok(());
                     }
                 }
             }
         }
 
-        // Open templates directory instead
-        let templates_dir = config::paths::data_dir().join("templates");
-        std::fs::create_dir_all(&templates_dir)?;
+        // Open methods directory instead (where QC_Method.sky should be)
+        let methods_dir = config::paths::data_dir().join("methods");
+        std::fs::create_dir_all(&methods_dir)?;
         std::process::Command::new("explorer")
-            .arg(&templates_dir)
+            .arg(&methods_dir)
             .spawn()?;
         Ok(())
     }
