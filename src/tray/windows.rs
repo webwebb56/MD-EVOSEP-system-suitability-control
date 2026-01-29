@@ -424,7 +424,12 @@ impl TrayApp {
                         }
                         // Fallback: open with default handler
                         std::process::Command::new("cmd")
-                            .args(["/c", "start", "\"\"", &format!("\"{}\"", template_path.display())])
+                            .args([
+                                "/c",
+                                "start",
+                                "\"\"",
+                                &format!("\"{}\"", template_path.display()),
+                            ])
                             .spawn()?;
                         return Ok(());
                     }
@@ -475,7 +480,14 @@ impl TrayApp {
         let exe_str = exe_path.to_string_lossy();
         // Use start with empty title (quoted) to handle paths with spaces
         std::process::Command::new("cmd")
-            .args(["/c", "start", "\"\"", "cmd", "/k", &format!("\"{}\" doctor", exe_str)])
+            .args([
+                "/c",
+                "start",
+                "\"\"",
+                "cmd",
+                "/k",
+                &format!("\"{}\" doctor", exe_str),
+            ])
             .spawn()?;
         Ok(())
     }
@@ -485,7 +497,14 @@ impl TrayApp {
         let exe_path = std::env::current_exe()?;
         let exe_str = exe_path.to_string_lossy();
         std::process::Command::new("cmd")
-            .args(["/c", "start", "\"\"", "cmd", "/k", &format!("\"{}\" failed list", exe_str)])
+            .args([
+                "/c",
+                "start",
+                "\"\"",
+                "cmd",
+                "/k",
+                &format!("\"{}\" failed list", exe_str),
+            ])
             .spawn()?;
         Ok(())
     }
