@@ -389,16 +389,19 @@ impl TrayApp {
     }
 
     fn open_config(&self) -> Result<()> {
-        // Launch the GUI configuration editor
-        let exe_path = std::env::current_exe()?;
-        std::process::Command::new(&exe_path).arg("gui").spawn()?;
+        // Open the config file in the default text editor
+        let config_path = config::paths::config_file();
+        let _ = std::process::Command::new("notepad.exe")
+            .arg(&config_path)
+            .spawn();
         Ok(())
     }
 
     fn open_logs(&self) -> Result<()> {
         let log_dir = config::paths::log_dir()?;
-        std::fs::create_dir_all(&log_dir)?;
-        shell_open(&log_dir.to_string_lossy())
+        let _ = std::fs::create_dir_all(&log_dir);
+        open_folder(&log_dir);
+        Ok(())
     }
 
     fn open_template(&self) -> Result<()> {
@@ -408,7 +411,8 @@ impl TrayApp {
                 if !instrument.template.is_empty() {
                     let template_path = std::path::Path::new(&instrument.template);
                     if template_path.exists() {
-                        return shell_open(&template_path.to_string_lossy());
+                        open_folder(template_path);
+                        return Ok(());
                     }
                 }
             }
@@ -416,8 +420,9 @@ impl TrayApp {
 
         // Fallback: open methods directory (where QC_Method.sky should be)
         let methods_dir = config::paths::data_dir().join("methods");
-        std::fs::create_dir_all(&methods_dir)?;
-        shell_open(&methods_dir.to_string_lossy())
+        let _ = std::fs::create_dir_all(&methods_dir);
+        open_folder(&methods_dir);
+        Ok(())
     }
 
     fn open_data_folder(&self) -> Result<()> {
@@ -426,14 +431,16 @@ impl TrayApp {
             if let Some(instrument) = cfg.instruments.first() {
                 let watch_path = std::path::Path::new(&instrument.watch_path);
                 if watch_path.exists() {
-                    return shell_open(&watch_path.to_string_lossy());
+                    open_folder(watch_path);
+                    return Ok(());
                 }
             }
         }
 
         // Fallback: open user's documents
         let docs_path = dirs::document_dir().unwrap_or_else(|| std::path::PathBuf::from("C:\\"));
-        shell_open(&docs_path.to_string_lossy())
+        open_folder(&docs_path);
+        Ok(())
     }
 
     fn run_doctor(&self) -> Result<()> {
@@ -754,6 +761,13 @@ fn shell_open(path: &str) -> Result<()> {
 /// Open URL in default browser
 fn open_url(url: &str) {
     let _ = shell_open(url);
+}
+
+/// Simple folder opener that can't fail - just runs explorer.exe
+fn open_folder(path: &std::path::Path) {
+    let _ = std::process::Command::new("explorer.exe")
+        .arg(path)
+        .spawn();
 }
 
 /// Ensure a Start Menu shortcut exists with the correct AppUserModelID.
