@@ -4,6 +4,10 @@
 
 ### Bug Fixes
 
+- **Fixed: Files being re-processed continuously**
+  - Added `processed_files` set to track completed files
+  - Prevents scan loop from re-detecting already processed files
+  - Files are only processed once per agent session
 - Verified toast notifications working correctly on Windows 10/11
 - Confirmed end-to-end extraction pipeline with real QC files (8/8 iRT peptides detected)
 

@@ -30,6 +30,8 @@ pub struct Watcher {
     config: WatcherConfig,
     ready_tx: mpsc::Sender<TrackedFile>,
     tracked_files: Arc<Mutex<HashMap<PathBuf, TrackedFile>>>,
+    /// Set of files that have already been processed (prevents re-processing on scan)
+    processed_files: Arc<Mutex<std::collections::HashSet<PathBuf>>>,
     running: Arc<Mutex<bool>>,
     is_network_path: bool,
 }
@@ -57,6 +59,7 @@ impl Watcher {
             config,
             ready_tx,
             tracked_files: Arc::new(Mutex::new(HashMap::new())),
+            processed_files: Arc::new(Mutex::new(std::collections::HashSet::new())),
             running: Arc::new(Mutex::new(false)),
             is_network_path,
         })
@@ -120,6 +123,7 @@ impl Watcher {
         // Start filesystem event watcher if enabled and not a network path
         if self.config.use_filesystem_events && !self.is_network_path {
             let tracked_files = Arc::clone(&self.tracked_files);
+            let processed_files = Arc::clone(&self.processed_files);
             let watch_path_clone = watch_path.clone();
             let vendor = self.instrument.vendor;
             let instrument_id = self.instrument.id.clone();
@@ -128,6 +132,7 @@ impl Watcher {
             std::thread::spawn(move || {
                 if let Err(e) = run_event_watcher(
                     tracked_files,
+                    processed_files,
                     watch_path_clone,
                     vendor,
                     instrument_id.clone(),
@@ -144,6 +149,7 @@ impl Watcher {
 
         // Start the finalization loop
         let tracked_files = Arc::clone(&self.tracked_files);
+        let processed_files = Arc::clone(&self.processed_files);
         let ready_tx = self.ready_tx.clone();
         let config = self.config.clone();
         let instrument_id = self.instrument.id.clone();
@@ -153,6 +159,7 @@ impl Watcher {
         tokio::spawn(async move {
             run_finalization_loop(
                 tracked_files,
+                processed_files,
                 ready_tx,
                 config,
                 instrument_id,
@@ -164,6 +171,7 @@ impl Watcher {
 
         // Start the scan loop (always runs as fallback/supplement)
         let tracked_files = Arc::clone(&self.tracked_files);
+        let processed_files = Arc::clone(&self.processed_files);
         let watch_path_clone = watch_path.clone();
         let file_pattern = self.instrument.file_pattern.clone();
         let vendor = self.instrument.vendor;
@@ -174,6 +182,7 @@ impl Watcher {
         tokio::spawn(async move {
             run_scan_loop(
                 tracked_files,
+                processed_files,
                 watch_path_clone,
                 file_pattern,
                 vendor,
@@ -216,12 +225,14 @@ impl Watcher {
 /// Run filesystem event watcher using notify crate.
 fn run_event_watcher(
     tracked_files: Arc<Mutex<HashMap<PathBuf, TrackedFile>>>,
+    processed_files: Arc<Mutex<std::collections::HashSet<PathBuf>>>,
     watch_path: PathBuf,
     vendor: Vendor,
     instrument_id: String,
     running: Arc<Mutex<bool>>,
 ) -> Result<()> {
     let tracked_files_clone = Arc::clone(&tracked_files);
+    let processed_files_clone = Arc::clone(&processed_files);
     let instrument_id_clone = instrument_id.clone();
 
     let mut watcher = RecommendedWatcher::new(
@@ -241,6 +252,11 @@ fn run_event_watcher(
                     for path in event.paths {
                         // Check if it's a valid raw file
                         if !is_valid_raw_file(&path, vendor) {
+                            continue;
+                        }
+
+                        // Skip if already processed
+                        if processed_files_clone.lock().unwrap().contains(&path) {
                             continue;
                         }
 
@@ -321,6 +337,7 @@ fn run_event_watcher(
 /// Run the periodic directory scan loop.
 async fn run_scan_loop(
     tracked_files: Arc<Mutex<HashMap<PathBuf, TrackedFile>>>,
+    processed_files: Arc<Mutex<std::collections::HashSet<PathBuf>>>,
     watch_path: PathBuf,
     file_pattern: String,
     vendor: Vendor,
@@ -356,6 +373,11 @@ async fn run_scan_loop(
         };
 
         for entry in entries.flatten() {
+            // Skip if already processed
+            if processed_files.lock().unwrap().contains(&entry) {
+                continue;
+            }
+
             // Skip if already tracking
             {
                 let tracked = tracked_files.lock().unwrap();
@@ -415,6 +437,7 @@ async fn run_scan_loop(
 /// Run the finalization state machine loop.
 async fn run_finalization_loop(
     tracked_files: Arc<Mutex<HashMap<PathBuf, TrackedFile>>>,
+    processed_files: Arc<Mutex<std::collections::HashSet<PathBuf>>>,
     ready_tx: mpsc::Sender<TrackedFile>,
     config: WatcherConfig,
     instrument_id: String,
@@ -554,6 +577,8 @@ async fn run_finalization_loop(
                             path = %path.display(),
                             "Removing completed file from tracking"
                         );
+                        // Add to processed set to prevent re-detection
+                        processed_files.lock().unwrap().insert(path.clone());
                         to_remove.push(path.clone());
                     }
 
