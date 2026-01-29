@@ -76,35 +76,3 @@ pub fn notify_extraction_failure(file_name: &str, error: &str) {
         );
     }
 }
-
-/// Show a toast notification for a processing event.
-pub fn notify_processing_started(file_name: &str) {
-    #[cfg(windows)]
-    {
-        use winrt_notification::{Duration, Toast};
-
-        let title = "Processing QC File";
-        let body = file_name;
-
-        debug!(file = file_name, "Showing processing notification");
-
-        // Use silent notification for processing start (less intrusive)
-        let result = Toast::new(Toast::POWERSHELL_APP_ID)
-            .title(title)
-            .text1(body)
-            .duration(Duration::Short)
-            .show();
-
-        if let Err(e) = result {
-            warn!(error = %e, "Failed to show toast notification");
-        }
-    }
-
-    #[cfg(not(windows))]
-    {
-        debug!(
-            file = file_name,
-            "Processing started (notifications not supported)"
-        );
-    }
-}
