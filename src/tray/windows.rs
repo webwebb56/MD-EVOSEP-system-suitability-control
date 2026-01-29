@@ -758,6 +758,165 @@ fn open_url(url: &str) {
     let _ = shell_open(url);
 }
 
+/// Ensure a Start Menu shortcut exists with the correct AppUserModelID.
+/// This is required for Windows toast notifications to show the correct app name.
+fn ensure_start_menu_shortcut() {
+    use crate::notifications::APP_USER_MODEL_ID;
+
+    // Get the Start Menu Programs folder
+    let start_menu = match std::env::var("APPDATA") {
+        Ok(appdata) => std::path::PathBuf::from(appdata)
+            .join("Microsoft")
+            .join("Windows")
+            .join("Start Menu")
+            .join("Programs"),
+        Err(_) => return,
+    };
+
+    let shortcut_path = start_menu.join("MD QC Agent.lnk");
+
+    // Skip if shortcut already exists
+    if shortcut_path.exists() {
+        return;
+    }
+
+    // Get the current executable path
+    let exe_path = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(_) => return,
+    };
+
+    println!("Creating Start Menu shortcut for notifications...");
+
+    // Use PowerShell with .NET to create shortcut with AppUserModelID
+    // This approach uses Windows.Storage which can properly set the property
+    let ps_script = format!(
+        r#"
+$shortcutPath = '{shortcut}'
+$targetPath = '{exe}'
+$appId = '{app_id}'
+
+# Create shortcut using WScript.Shell
+$shell = New-Object -ComObject WScript.Shell
+$shortcut = $shell.CreateShortcut($shortcutPath)
+$shortcut.TargetPath = $targetPath
+$shortcut.Arguments = 'tray'
+$shortcut.Description = 'Mass Dynamics QC Agent'
+$shortcut.Save()
+
+# Set AppUserModelID using PropertyStore
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+
+public class ShortcutHelper {{
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    static extern int SHGetPropertyStoreFromParsingName(
+        string pszPath,
+        IntPtr pbc,
+        int flags,
+        ref Guid riid,
+        out IPropertyStore ppv);
+
+    [ComImport]
+    [Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IPropertyStore {{
+        int GetCount(out uint cProps);
+        int GetAt(uint iProp, out PROPERTYKEY pkey);
+        int GetValue(ref PROPERTYKEY key, out PROPVARIANT pv);
+        int SetValue(ref PROPERTYKEY key, ref PROPVARIANT pv);
+        int Commit();
+    }}
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct PROPERTYKEY {{
+        public Guid fmtid;
+        public uint pid;
+    }}
+
+    [StructLayout(LayoutKind.Sequential)]
+    struct PROPVARIANT {{
+        public ushort vt;
+        public ushort wReserved1;
+        public ushort wReserved2;
+        public ushort wReserved3;
+        public IntPtr pwszVal;
+        public IntPtr dummy;
+    }}
+
+    public static void SetAppUserModelId(string shortcutPath, string appId) {{
+        Guid IID_IPropertyStore = new Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99");
+        IPropertyStore store;
+        int hr = SHGetPropertyStoreFromParsingName(shortcutPath, IntPtr.Zero, 2, ref IID_IPropertyStore, out store);
+        if (hr != 0) return;
+
+        PROPERTYKEY key = new PROPERTYKEY();
+        key.fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3");
+        key.pid = 5;
+
+        PROPVARIANT pv = new PROPVARIANT();
+        pv.vt = 31; // VT_LPWSTR
+        pv.pwszVal = Marshal.StringToCoTaskMemUni(appId);
+
+        store.SetValue(ref key, ref pv);
+        store.Commit();
+        Marshal.FreeCoTaskMem(pv.pwszVal);
+    }}
+}}
+'@
+
+[ShortcutHelper]::SetAppUserModelId($shortcutPath, $appId)
+Write-Host 'Shortcut created with AppUserModelID'
+"#,
+        shortcut = shortcut_path
+            .display()
+            .to_string()
+            .replace('\\', "\\\\")
+            .replace('\'', "''"),
+        exe = exe_path
+            .display()
+            .to_string()
+            .replace('\\', "\\\\")
+            .replace('\'', "''"),
+        app_id = APP_USER_MODEL_ID
+    );
+
+    // Execute PowerShell script
+    let result = std::process::Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &ps_script,
+        ])
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .output();
+
+    match result {
+        Ok(output) => {
+            if output.status.success() {
+                println!("Start Menu shortcut created successfully");
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                if !stderr.is_empty() {
+                    eprintln!("Shortcut creation warning: {}", stderr);
+                }
+                if stdout.contains("Shortcut created") {
+                    println!("Start Menu shortcut created");
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to run PowerShell: {}", e);
+        }
+    }
+}
+
 /// Run the system tray application
 pub async fn run_tray() -> Result<()> {
     // Wrap in inner function to catch errors and show message box
@@ -793,6 +952,9 @@ async fn run_tray_inner() -> Result<()> {
 
     // Ensure directories exist
     let _ = config::paths::ensure_directories();
+
+    // Ensure Start Menu shortcut exists (for notification app name)
+    ensure_start_menu_shortcut();
 
     println!("Starting MD QC Agent system tray...");
     println!("Right-click the tray icon for options.");

@@ -5,17 +5,16 @@
 use tracing::{debug, warn};
 
 /// App User Model ID for notifications.
-/// Note: For custom app names to display, a Start Menu shortcut with this ID must exist.
-/// The installer should create this shortcut. Without it, Windows may show a generic name.
+/// This must match the ID set on the Start Menu shortcut created by ensure_start_menu_shortcut().
 #[cfg(windows)]
-const APP_ID: &str = "MassDynamics.QCAgent";
+pub const APP_USER_MODEL_ID: &str = "MassDynamics.QCAgent";
 
 /// Helper to show a toast notification with consistent styling.
 #[cfg(windows)]
 fn show_toast(title: &str, body: &str, silent: bool) {
     use winrt_notification::{Duration, Sound, Toast};
 
-    let mut toast = Toast::new(APP_ID);
+    let mut toast = Toast::new(APP_USER_MODEL_ID);
     toast = toast.title(title).text1(body).duration(Duration::Short);
 
     if !silent {

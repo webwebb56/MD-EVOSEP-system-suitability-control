@@ -1,5 +1,15 @@
 # MD QC Agent Changelog
 
+## v0.4.8
+
+### Features
+
+- **Auto-create Start Menu shortcut**: Creates shortcut with AppUserModelID on first run
+  - Notifications now show "Mass Dynamics QC Agent" instead of "PowerShell"
+  - Shortcut placed in Start Menu Programs folder automatically
+
+---
+
 ## v0.4.7
 
 ### Features
