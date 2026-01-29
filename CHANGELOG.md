@@ -1,6 +1,38 @@
 # MD QC Agent Changelog
 
-## v0.4.5 (Current Development)
+## v0.4.6
+
+### Features Added
+
+#### Flexible Skyline Report Parsing
+- Header-based column detection supports various Skyline report formats
+- Recognizes common column name variations (PeptideSequence, Mz, TotalArea, etc.)
+- No longer requires columns in specific order
+
+### Bug Fixes
+
+#### Skyline Command Arguments
+- **Issue**: SkylineCmd.exe requires `--name=value` format, not `--name value`
+- **Fix**: Changed all argument passing to use `=` format
+- **File**: `src/extractor/mod.rs`
+
+#### Skyline Report Export
+- **Issue**: Extraction failed with "report does not exist"
+- **Solution**: Users must create `MD_QC_Report` in their `QC_Method.sky` template
+- Added `--report-invariant` flag for language-independent column names
+- Added helpful error message explaining how to create the report
+
+### Documentation
+
+- Added detailed step-by-step guide for creating `QC_Method.sky`
+- Documented Full-Scan settings for DIA data extraction
+- Documented MD_QC_Report creation with required columns
+- Added troubleshooting for common Skyline errors
+- Updated all config examples to use `methods/QC_Method.sky` path
+
+---
+
+## v0.4.5
 
 ### Features Added
 
@@ -34,7 +66,7 @@
 - **Fix**: Changed to `ControlFlow::WaitUntil(100ms)` to poll for menu events periodically
 - **File**: `src/tray/windows.rs`
 
-#### Template Path Handling (IN PROGRESS)
+#### Template Path Handling
 - **Issue**: Absolute template paths in config not handled correctly
 - **Root cause**: Code joined `template_dir` + absolute path, creating invalid path
 - **Fix**: Check if path is absolute before joining
@@ -44,22 +76,6 @@
 - **Issue**: Skyline errors showed empty stderr
 - **Fix**: Also capture stdout (Skyline often writes errors there) and show exit code
 - **File**: `src/extractor/mod.rs`
-
-### Known Issues / TODO
-
-#### Skyline Report Definition Missing
-- **Issue**: Skyline extraction fails with "report does not exist"
-- **Cause**: Template doesn't have "MD_QC_Report" defined
-- **Attempted fix**: Created `assets/MD_QC_Report.skyr` but format incorrect
-- **TODO**: Need to either:
-  1. Create correct .skyr format for Skyline
-  2. Use `--report-invariant` option for built-in report
-  3. Have users define the report in their template
-  4. Export data differently (save document, parse .sky file)
-
-#### Files Re-processed After Failure
-- **Issue**: Files that fail extraction keep getting re-detected and re-processed
-- **TODO**: Add mechanism to skip recently-failed files for a cooldown period
 
 ---
 
