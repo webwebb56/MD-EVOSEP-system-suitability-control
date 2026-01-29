@@ -389,10 +389,10 @@ impl TrayApp {
     }
 
     fn open_config(&self) -> Result<()> {
-        // Open the config file in the default text editor
-        let config_path = config::paths::config_file();
-        let _ = std::process::Command::new("notepad.exe")
-            .arg(&config_path)
+        // Launch the GUI configuration editor
+        let exe_path = std::env::current_exe()?;
+        let _ = std::process::Command::new("cmd")
+            .args(["/c", &format!("\"{}\" gui", exe_path.display())])
             .spawn();
         Ok(())
     }
