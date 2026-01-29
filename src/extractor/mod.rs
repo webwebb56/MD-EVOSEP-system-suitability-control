@@ -158,7 +158,9 @@ impl Extractor {
 
             // Add helpful message if report is missing
             if error_msg.contains("does not exist") && error_msg.contains("report") {
-                error_msg.push_str("\n\nHint: Your Skyline template needs a report named 'MD_QC_Report'. ");
+                error_msg.push_str(
+                    "\n\nHint: Your Skyline template needs a report named 'MD_QC_Report'. ",
+                );
                 error_msg.push_str("Open the template in Skyline, go to View > Document Grid > Reports > Edit Reports, ");
                 error_msg.push_str("and create a report with columns: Peptide Sequence, Precursor Mz, Retention Time, Total Area, Max Height, Fwhm, Mass Error PPM.");
             }
@@ -367,14 +369,18 @@ fn build_column_map(headers: &csv::StringRecord) -> std::collections::HashMap<&'
         // Match various column name patterns to our canonical field names
         let field = match header_normalized.as_str() {
             // Peptide/Molecule identification
-            "peptidesequence" | "peptide" | "modifiedsequence" | "sequence" => Some("peptide_sequence"),
+            "peptidesequence" | "peptide" | "modifiedsequence" | "sequence" => {
+                Some("peptide_sequence")
+            }
             "moleculename" | "molecule" | "compoundname" => Some("peptide_sequence"),
 
             // Precursor m/z
             "mz" | "precursormz" | "precursormass" | "mass" => Some("precursor_mz"),
 
             // Retention time
-            "retentiontime" | "rt" | "peptideretentiontime" | "bestretentiontime" => Some("retention_time"),
+            "retentiontime" | "rt" | "peptideretentiontime" | "bestretentiontime" => {
+                Some("retention_time")
+            }
             "predictedretentiontime" | "expectedrt" | "rtexpected" => Some("rt_expected"),
             "rtdelta" | "retentiontimedelta" | "rtdifference" => Some("rt_delta"),
 
