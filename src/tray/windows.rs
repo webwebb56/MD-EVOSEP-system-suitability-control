@@ -424,7 +424,7 @@ impl TrayApp {
                         }
                         // Fallback: open with default handler
                         std::process::Command::new("cmd")
-                            .args(["/c", "start", "", template_path.to_str().unwrap_or("")])
+                            .args(["/c", "start", "\"\"", &format!("\"{}\"", template_path.display())])
                             .spawn()?;
                         return Ok(());
                     }
@@ -472,17 +472,10 @@ impl TrayApp {
     fn run_doctor(&self) -> Result<()> {
         // Open a command prompt and run mdqc doctor
         let exe_path = std::env::current_exe()?;
-        // Use cmd /c start to open a new console window that stays open
+        let exe_str = exe_path.to_string_lossy();
+        // Use start with empty title (quoted) to handle paths with spaces
         std::process::Command::new("cmd")
-            .args([
-                "/c",
-                "start",
-                "MD QC Diagnostics",
-                "cmd",
-                "/k",
-                exe_path.to_str().unwrap_or("mdqc"),
-                "doctor",
-            ])
+            .args(["/c", "start", "\"\"", "cmd", "/k", &format!("\"{}\" doctor", exe_str)])
             .spawn()?;
         Ok(())
     }
@@ -490,17 +483,9 @@ impl TrayApp {
     fn view_failed_files(&self) -> Result<()> {
         // Open a command prompt and run mdqc failed list
         let exe_path = std::env::current_exe()?;
+        let exe_str = exe_path.to_string_lossy();
         std::process::Command::new("cmd")
-            .args([
-                "/c",
-                "start",
-                "MD QC Failed Files",
-                "cmd",
-                "/k",
-                exe_path.to_str().unwrap_or("mdqc"),
-                "failed",
-                "list",
-            ])
+            .args(["/c", "start", "\"\"", "cmd", "/k", &format!("\"{}\" failed list", exe_str)])
             .spawn()?;
         Ok(())
     }
@@ -806,7 +791,7 @@ stability_window_seconds = 60
 /// Open URL in default browser
 fn open_url(url: &str) {
     let _ = std::process::Command::new("cmd")
-        .args(["/c", "start", "", url])
+        .args(["/c", "start", "\"\"", url])
         .spawn();
 }
 
