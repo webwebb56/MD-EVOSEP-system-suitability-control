@@ -1,6 +1,7 @@
 //! Windows system tray implementation.
 
 use anyhow::Result;
+use std::os::windows::process::CommandExt;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -397,111 +398,60 @@ impl TrayApp {
     fn open_logs(&self) -> Result<()> {
         let log_dir = config::paths::log_dir()?;
         std::fs::create_dir_all(&log_dir)?;
-        std::process::Command::new("explorer")
-            .arg(&log_dir)
-            .spawn()?;
-        Ok(())
+        shell_open(&log_dir.to_string_lossy())
     }
 
     fn open_template(&self) -> Result<()> {
         // Try to load config and find template path
-        let config_path = config::paths::config_file();
-        if config_path.exists() {
-            if let Ok(cfg) = config::Config::load() {
-                // Get the first instrument's template
-                if let Some(instrument) = cfg.instruments.first() {
-                    if !instrument.template.is_empty() {
-                        let template_path = std::path::Path::new(&instrument.template);
-                        if template_path.exists() {
-                            // Open with Skyline if available
-                            if let Some(skyline_path) = find_skyline() {
-                                let skyline_exe = skyline_path.with_file_name("Skyline.exe");
-                                if skyline_exe.exists() {
-                                    std::process::Command::new(&skyline_exe)
-                                        .arg(template_path)
-                                        .spawn()?;
-                                    return Ok(());
-                                }
-                            }
-                            // Fallback: open with explorer (uses default handler)
-                            std::process::Command::new("explorer")
-                                .arg(template_path)
-                                .spawn()?;
-                            return Ok(());
-                        }
+        if let Ok(cfg) = config::Config::load() {
+            if let Some(instrument) = cfg.instruments.first() {
+                if !instrument.template.is_empty() {
+                    let template_path = std::path::Path::new(&instrument.template);
+                    if template_path.exists() {
+                        return shell_open(&template_path.to_string_lossy());
                     }
                 }
             }
         }
 
-        // Open methods directory instead (where QC_Method.sky should be)
+        // Fallback: open methods directory (where QC_Method.sky should be)
         let methods_dir = config::paths::data_dir().join("methods");
         std::fs::create_dir_all(&methods_dir)?;
-        std::process::Command::new("explorer")
-            .arg(&methods_dir)
-            .spawn()?;
-        Ok(())
+        shell_open(&methods_dir.to_string_lossy())
     }
 
     fn open_data_folder(&self) -> Result<()> {
         // Try to load config and find watch path
-        let config_path = config::paths::config_file();
-        if config_path.exists() {
-            if let Ok(cfg) = config::Config::load() {
-                // Get the first instrument's watch path
-                if let Some(instrument) = cfg.instruments.first() {
-                    let watch_path = std::path::Path::new(&instrument.watch_path);
-                    if watch_path.exists() {
-                        std::process::Command::new("explorer")
-                            .arg(watch_path)
-                            .spawn()?;
-                        return Ok(());
-                    }
+        if let Ok(cfg) = config::Config::load() {
+            if let Some(instrument) = cfg.instruments.first() {
+                let watch_path = std::path::Path::new(&instrument.watch_path);
+                if watch_path.exists() {
+                    return shell_open(&watch_path.to_string_lossy());
                 }
             }
         }
 
         // Fallback: open user's documents
-        if let Ok(docs) = std::env::var("USERPROFILE") {
-            let docs_path = std::path::Path::new(&docs).join("Documents");
-            std::process::Command::new("explorer")
-                .arg(&docs_path)
-                .spawn()?;
-        }
-        Ok(())
+        let docs_path = dirs::document_dir().unwrap_or_else(|| std::path::PathBuf::from("C:\\"));
+        shell_open(&docs_path.to_string_lossy())
     }
 
     fn run_doctor(&self) -> Result<()> {
-        // Open a command prompt and run mdqc doctor
+        // Run mdqc doctor in a visible console
         let exe_path = std::env::current_exe()?;
-        let exe_str = exe_path.to_string_lossy();
-        // Use start with empty title (quoted) to handle paths with spaces
-        std::process::Command::new("cmd")
-            .args([
-                "/c",
-                "start",
-                "\"\"",
-                "cmd",
-                "/k",
-                &format!("\"{}\" doctor", exe_str),
-            ])
+        std::process::Command::new(&exe_path)
+            .arg("doctor")
+            .creation_flags(0x00000010) // CREATE_NEW_CONSOLE
             .spawn()?;
         Ok(())
     }
 
     fn view_failed_files(&self) -> Result<()> {
-        // Open a command prompt and run mdqc failed list
+        // Run mdqc failed list in a visible console
         let exe_path = std::env::current_exe()?;
-        let exe_str = exe_path.to_string_lossy();
-        std::process::Command::new("cmd")
-            .args([
-                "/c",
-                "start",
-                "\"\"",
-                "cmd",
-                "/k",
-                &format!("\"{}\" failed list", exe_str),
-            ])
+        std::process::Command::new(&exe_path)
+            .args(["failed", "list"])
+            .creation_flags(0x00000010) // CREATE_NEW_CONSOLE
             .spawn()?;
         Ok(())
     }
@@ -632,39 +582,6 @@ impl ApplicationHandler for TrayApp {
             std::time::Instant::now() + std::time::Duration::from_millis(100),
         ));
     }
-}
-
-/// Find Skyline installation
-fn find_skyline() -> Option<std::path::PathBuf> {
-    // Check common locations
-    let common_paths = [
-        r"C:\Program Files\Skyline\SkylineCmd.exe",
-        r"C:\Program Files (x86)\Skyline\SkylineCmd.exe",
-    ];
-
-    for path in &common_paths {
-        let p = std::path::Path::new(path);
-        if p.exists() {
-            return Some(p.to_path_buf());
-        }
-    }
-
-    // Check ClickOnce location
-    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-        let apps_dir = std::path::Path::new(&local_app_data)
-            .join("Apps")
-            .join("2.0");
-        if apps_dir.exists() {
-            // Search for SkylineCmd.exe in the ClickOnce deployment
-            if let Ok(entries) = glob::glob(&format!("{}/**/SkylineCmd.exe", apps_dir.display())) {
-                if let Some(entry) = entries.flatten().next() {
-                    return Some(entry);
-                }
-            }
-        }
-    }
-
-    None
 }
 
 /// Show a Windows message box (ensures it appears in foreground)
@@ -804,11 +721,41 @@ stability_window_seconds = 60
     }
 }
 
+/// Open a file, folder, or URL using the Windows Shell API.
+/// This is the correct, robust way to open things on Windows.
+fn shell_open(path: &str) -> Result<()> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null;
+
+    let path_wide: Vec<u16> = OsStr::new(path).encode_wide().chain(Some(0)).collect();
+    let operation: Vec<u16> = OsStr::new("open").encode_wide().chain(Some(0)).collect();
+
+    let result = unsafe {
+        windows_sys::Win32::UI::Shell::ShellExecuteW(
+            0,                  // hwnd
+            operation.as_ptr(), // lpOperation ("open")
+            path_wide.as_ptr(), // lpFile
+            null(),             // lpParameters
+            null(),             // lpDirectory
+            1,                  // nShowCmd (SW_SHOWNORMAL = 1)
+        )
+    };
+
+    // ShellExecuteW returns > 32 on success
+    if result as usize > 32 {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "ShellExecute failed with code {}",
+            result as usize
+        ))
+    }
+}
+
 /// Open URL in default browser
 fn open_url(url: &str) {
-    let _ = std::process::Command::new("cmd")
-        .args(["/c", "start", "\"\"", url])
-        .spawn();
+    let _ = shell_open(url);
 }
 
 /// Run the system tray application
