@@ -223,6 +223,7 @@ impl Watcher {
 }
 
 /// Run filesystem event watcher using notify crate.
+#[allow(clippy::too_many_arguments)]
 fn run_event_watcher(
     tracked_files: Arc<Mutex<HashMap<PathBuf, TrackedFile>>>,
     processed_files: Arc<Mutex<std::collections::HashSet<PathBuf>>>,
@@ -335,6 +336,7 @@ fn run_event_watcher(
 }
 
 /// Run the periodic directory scan loop.
+#[allow(clippy::too_many_arguments)]
 async fn run_scan_loop(
     tracked_files: Arc<Mutex<HashMap<PathBuf, TrackedFile>>>,
     processed_files: Arc<Mutex<std::collections::HashSet<PathBuf>>>,
