@@ -191,6 +191,11 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                     .unwrap_or("unknown")
                     .to_string();
 
+                // Notify processing started
+                if enable_notifications {
+                    crate::notifications::notify_processing_started(&file_name);
+                }
+
                 match extractor.extract(&file_path, &instrument, &classification).await {
                     Ok(result) => {
                         info!(
@@ -219,8 +224,14 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
                             if let Some(w) = watcher {
                                 w.mark_failed(&file_path);
                             }
-                        } else if let Some(w) = watcher {
-                            w.mark_done(&file_path);
+                        } else {
+                            // Notify queued for upload
+                            if enable_notifications {
+                                crate::notifications::notify_upload_queued(&file_name);
+                            }
+                            if let Some(w) = watcher {
+                                w.mark_done(&file_path);
+                            }
                         }
                     }
                     Err(e) => {

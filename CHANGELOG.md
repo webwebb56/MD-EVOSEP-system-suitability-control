@@ -2,14 +2,24 @@
 
 ## v0.4.7
 
+### Features
+
+- **Enhanced notifications**: Added notifications for processing stages
+  - "Processing QC File" - when extraction starts
+  - "QC Extraction Complete" - when extraction succeeds (with sound)
+  - "QC Extraction Failed" - when extraction fails (with sound)
+  - "QC Results Queued" - when results are spooled for upload
+- Changed notification app ID to "MassDynamics.QCAgent"
+
 ### Bug Fixes
 
+- **Fixed: Tray menu actions failing** with "os error 50"
+  - Now uses Windows ShellExecuteW API (the correct way)
+  - Removed fragile process spawning for opening folders/files
 - **Fixed: Files being re-processed continuously**
   - Added `processed_files` set to track completed files
   - Prevents scan loop from re-detecting already processed files
   - Files are only processed once per agent session
-- Verified toast notifications working correctly on Windows 10/11
-- Confirmed end-to-end extraction pipeline with real QC files (8/8 iRT peptides detected)
 
 ---
 
