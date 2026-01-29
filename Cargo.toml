@@ -1,6 +1,6 @@
 [package]
 name = "mdqc-agent"
-version = "0.4.6"
+version = "0.4.7"
 edition = "2021"
 authors = ["Mass Dynamics <engineering@massdynamics.com>"]
 description = "MD Local QC Agent - System suitability monitoring for mass spectrometry"
