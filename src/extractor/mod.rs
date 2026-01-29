@@ -99,32 +99,17 @@ impl Extractor {
 
         let start = Instant::now();
 
-        // Ensure report definition exists in work directory
-        let report_def_path = work_dir.join("MD_QC_Report.skyr");
-        if !report_def_path.exists() {
-            // Write embedded report definition
-            const REPORT_DEF: &str = include_str!("../../assets/MD_QC_Report.skyr");
-            std::fs::write(&report_def_path, REPORT_DEF)
-                .map_err(|e| ExtractionError::SkylineExecution(format!("Failed to write report definition: {}", e)))?;
-        }
-
         // Build Skyline command
+        // Note: Template must have a report named "MD_QC_Report" defined
+        // SkylineCmd requires --name=value format for arguments
         let mut cmd = Command::new(skyline_path);
         cmd.current_dir(&work_dir) // Set working directory to spool/work
-            .arg("--in")
-            .arg(&template_path)
-            .arg("--import-file")
-            .arg(raw_path)
-            .arg("--report-add")
-            .arg(&report_def_path)
-            .arg("--report-conflict-resolution")
-            .arg("overwrite")
-            .arg("--report-name")
-            .arg("MD_QC_Report")
-            .arg("--report-file")
-            .arg(&report_path)
-            .arg("--report-format")
-            .arg("csv")
+            .arg(format!("--in={}", template_path.display()))
+            .arg(format!("--import-file={}", raw_path.display()))
+            .arg("--report-name=MD_QC_Report")
+            .arg("--report-invariant") // Use language-independent column names
+            .arg(format!("--report-file={}", report_path.display()))
+            .arg("--report-format=csv")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
@@ -163,13 +148,20 @@ impl Extractor {
             let exit_code = output.status.code().unwrap_or(-1);
 
             // Skyline often writes errors to stdout, not stderr
-            let error_msg = if !stderr.is_empty() {
+            let mut error_msg = if !stderr.is_empty() {
                 stderr.to_string()
             } else if !stdout.is_empty() {
                 stdout.to_string()
             } else {
                 format!("Skyline exited with code {}", exit_code)
             };
+
+            // Add helpful message if report is missing
+            if error_msg.contains("does not exist") && error_msg.contains("report") {
+                error_msg.push_str("\n\nHint: Your Skyline template needs a report named 'MD_QC_Report'. ");
+                error_msg.push_str("Open the template in Skyline, go to View > Document Grid > Reports > Edit Reports, ");
+                error_msg.push_str("and create a report with columns: Peptide Sequence, Precursor Mz, Retention Time, Total Area, Max Height, Fwhm, Mass Error PPM.");
+            }
 
             error!(
                 stderr = %stderr,
@@ -223,6 +215,8 @@ impl Extractor {
     }
 
     /// Parse the Skyline report CSV.
+    ///
+    /// Uses header-based column detection to be flexible with different report formats.
     fn parse_report(&self, report_path: &Path) -> Result<Vec<TargetMetrics>, ExtractionError> {
         let file = std::fs::File::open(report_path)
             .map_err(|e| ExtractionError::ReportParse(e.to_string()))?;
@@ -230,33 +224,49 @@ impl Extractor {
         let mut reader = csv::Reader::from_reader(file);
         let mut metrics = Vec::new();
 
-        for result in reader.records() {
+        // Build column index map from headers
+        let headers = reader
+            .headers()
+            .map_err(|e| ExtractionError::ReportParse(format!("Failed to read headers: {}", e)))?
+            .clone();
+
+        let col_map = build_column_map(&headers);
+        debug!(?col_map, "Parsed report column mapping");
+
+        for (row_idx, result) in reader.records().enumerate() {
             let record = result.map_err(|e| ExtractionError::ReportParse(e.to_string()))?;
 
-            // Parse CSV fields - adjust column indices based on actual Skyline report format
+            // Generate target_id from peptide sequence + mz, or use row number
+            let peptide_seq = get_string(&record, col_map.get("peptide_sequence"));
+            let mz = get_float(&record, col_map.get("precursor_mz")).unwrap_or(0.0);
+            let target_id = if let Some(ref seq) = peptide_seq {
+                format!("{}_{:.2}", seq, mz)
+            } else {
+                format!("target_{}", row_idx + 1)
+            };
+
+            let peak_area = get_float(&record, col_map.get("peak_area")).unwrap_or(0.0);
+
             let target_metrics = TargetMetrics {
-                target_id: record.get(0).unwrap_or("").to_string(),
-                peptide_sequence: record.get(1).map(|s| s.to_string()),
-                precursor_mz: record.get(2).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                retention_time: record.get(3).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                rt_expected: record.get(4).and_then(|s| s.parse().ok()),
-                rt_delta: record.get(5).and_then(|s| s.parse().ok()),
-                peak_area: record.get(6).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                peak_height: record.get(7).and_then(|s| s.parse().ok()).unwrap_or(0.0),
-                peak_width_fwhm: record.get(8).and_then(|s| s.parse().ok()),
-                peak_symmetry: record.get(9).and_then(|s| s.parse().ok()),
-                mass_error_ppm: record.get(10).and_then(|s| s.parse().ok()),
-                isotope_dot_product: record.get(11).and_then(|s| s.parse().ok()),
-                detected: record
-                    .get(6)
-                    .and_then(|s| s.parse::<f64>().ok())
-                    .map(|a| a > 0.0)
-                    .unwrap_or(false),
+                target_id,
+                peptide_sequence: peptide_seq,
+                precursor_mz: mz,
+                retention_time: get_float(&record, col_map.get("retention_time")).unwrap_or(0.0),
+                rt_expected: get_float(&record, col_map.get("rt_expected")),
+                rt_delta: get_float(&record, col_map.get("rt_delta")),
+                peak_area,
+                peak_height: get_float(&record, col_map.get("peak_height")).unwrap_or(0.0),
+                peak_width_fwhm: get_float(&record, col_map.get("fwhm")),
+                peak_symmetry: get_float(&record, col_map.get("peak_symmetry")),
+                mass_error_ppm: get_float(&record, col_map.get("mass_error_ppm")),
+                isotope_dot_product: get_float(&record, col_map.get("isotope_dot_product")),
+                detected: peak_area > 0.0,
             };
 
             metrics.push(target_metrics);
         }
 
+        info!(targets_parsed = metrics.len(), "Parsed Skyline report");
         Ok(metrics)
     }
 
@@ -342,4 +352,64 @@ fn calculate_file_hash(path: &Path) -> Result<String> {
     } else {
         anyhow::bail!("Path is neither file nor directory: {}", path.display())
     }
+}
+
+/// Build a mapping from our field names to CSV column indices.
+///
+/// Handles various Skyline column name variations.
+fn build_column_map(headers: &csv::StringRecord) -> std::collections::HashMap<&'static str, usize> {
+    let mut map = std::collections::HashMap::new();
+
+    for (idx, header) in headers.iter().enumerate() {
+        let header_lower = header.to_lowercase();
+        let header_normalized = header_lower.replace(" ", "").replace("_", "");
+
+        // Match various column name patterns to our canonical field names
+        let field = match header_normalized.as_str() {
+            // Peptide/Molecule identification
+            "peptidesequence" | "peptide" | "modifiedsequence" | "sequence" => Some("peptide_sequence"),
+            "moleculename" | "molecule" | "compoundname" => Some("peptide_sequence"),
+
+            // Precursor m/z
+            "mz" | "precursormz" | "precursormass" | "mass" => Some("precursor_mz"),
+
+            // Retention time
+            "retentiontime" | "rt" | "peptideretentiontime" | "bestretentiontime" => Some("retention_time"),
+            "predictedretentiontime" | "expectedrt" | "rtexpected" => Some("rt_expected"),
+            "rtdelta" | "retentiontimedelta" | "rtdifference" => Some("rt_delta"),
+
+            // Peak metrics
+            "totalarea" | "area" | "peakarea" | "sumarea" => Some("peak_area"),
+            "maxheight" | "height" | "peakheight" | "maxintensity" => Some("peak_height"),
+            "fwhm" | "maxfwhm" | "peakwidth" | "width" => Some("fwhm"),
+            "peaksymmetry" | "symmetry" => Some("peak_symmetry"),
+
+            // Mass accuracy
+            "masserrorppm" | "averagemasserrorppm" | "ppm" | "deltamass" => Some("mass_error_ppm"),
+
+            // Quality scores
+            "isotopedotproduct" | "idotp" | "dotproduct" => Some("isotope_dot_product"),
+
+            _ => None,
+        };
+
+        if let Some(field_name) = field {
+            map.insert(field_name, idx);
+        }
+    }
+
+    map
+}
+
+/// Get a string value from a CSV record by column index.
+fn get_string(record: &csv::StringRecord, col: Option<&usize>) -> Option<String> {
+    col.and_then(|&idx| record.get(idx))
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// Get a float value from a CSV record by column index.
+fn get_float(record: &csv::StringRecord, col: Option<&usize>) -> Option<f64> {
+    col.and_then(|&idx| record.get(idx))
+        .and_then(|s| s.parse().ok())
 }
