@@ -13,12 +13,20 @@ struct ConfigEditor {
     /// Path to the config file
     config_path: std::path::PathBuf,
 
+    /// Agent settings
+    enable_notifications: bool,
+
     /// Cloud settings
     endpoint: String,
     api_token: String,
 
     /// Skyline settings
     skyline_path: String,
+    skyline_timeout_secs: u64,
+
+    /// Watcher settings
+    scan_interval_secs: u64,
+    stability_window_secs: u64,
 
     /// Instruments
     instruments: Vec<InstrumentEditor>,
@@ -53,50 +61,49 @@ impl ConfigEditor {
     fn new() -> Self {
         let config_path = config::paths::config_file();
 
-        // Try to load existing config
-        let (endpoint, api_token, skyline_path, instruments) = if config_path.exists() {
-            match Config::load() {
-                Ok(cfg) => {
-                    let instruments: Vec<InstrumentEditor> = cfg
-                        .instruments
-                        .iter()
-                        .map(|i| InstrumentEditor {
-                            id: i.id.clone(),
-                            vendor: i.vendor,
-                            watch_path: i.watch_path.clone(),
-                            file_pattern: i.file_pattern.clone(),
-                            template: i.template.clone(),
-                        })
-                        .collect();
+        // Default values
+        let mut enable_notifications = true;
+        let mut endpoint = "https://qc-ingest.massdynamics.com/v1/".to_string();
+        let mut api_token = String::new();
+        let mut skyline_path = String::new();
+        let mut skyline_timeout_secs: u64 = 300;
+        let mut scan_interval_secs: u64 = 30;
+        let mut stability_window_secs: u64 = 60;
+        let mut instruments = Vec::new();
 
-                    (
-                        cfg.cloud.endpoint.clone(),
-                        cfg.cloud.api_token.clone().unwrap_or_default(),
-                        cfg.skyline.path.clone().unwrap_or_default(),
-                        instruments,
-                    )
-                }
-                Err(_) => (
-                    "https://qc-ingest.massdynamics.com/v1/".to_string(),
-                    String::new(),
-                    String::new(),
-                    Vec::new(),
-                ),
+        // Try to load existing config
+        if config_path.exists() {
+            if let Ok(cfg) = Config::load() {
+                enable_notifications = cfg.agent.enable_toast_notifications;
+                endpoint = cfg.cloud.endpoint.clone();
+                api_token = cfg.cloud.api_token.clone().unwrap_or_default();
+                skyline_path = cfg.skyline.path.clone().unwrap_or_default();
+                skyline_timeout_secs = cfg.skyline.timeout_seconds;
+                scan_interval_secs = cfg.watcher.scan_interval_seconds;
+                stability_window_secs = cfg.watcher.stability_window_seconds;
+                instruments = cfg
+                    .instruments
+                    .iter()
+                    .map(|i| InstrumentEditor {
+                        id: i.id.clone(),
+                        vendor: i.vendor,
+                        watch_path: i.watch_path.clone(),
+                        file_pattern: i.file_pattern.clone(),
+                        template: i.template.clone(),
+                    })
+                    .collect();
             }
-        } else {
-            (
-                "https://qc-ingest.massdynamics.com/v1/".to_string(),
-                String::new(),
-                String::new(),
-                Vec::new(),
-            )
-        };
+        }
 
         Self {
             config_path,
+            enable_notifications,
             endpoint,
             api_token,
             skyline_path,
+            skyline_timeout_secs,
+            scan_interval_secs,
+            stability_window_secs,
             instruments,
             status_message: None,
         }
@@ -112,6 +119,11 @@ impl ConfigEditor {
 
         // Update with editor values
         config.path = self.config_path.clone();
+
+        // Agent settings
+        config.agent.enable_toast_notifications = self.enable_notifications;
+
+        // Cloud settings
         config.cloud.endpoint = self.endpoint.clone();
         config.cloud.api_token = if self.api_token.is_empty() {
             None
@@ -119,12 +131,19 @@ impl ConfigEditor {
             Some(self.api_token.clone())
         };
 
+        // Skyline settings
         config.skyline.path = if self.skyline_path.is_empty() {
             None
         } else {
             Some(self.skyline_path.clone())
         };
+        config.skyline.timeout_seconds = self.skyline_timeout_secs;
 
+        // Watcher settings
+        config.watcher.scan_interval_seconds = self.scan_interval_secs;
+        config.watcher.stability_window_seconds = self.stability_window_secs;
+
+        // Instruments
         config.instruments = self
             .instruments
             .iter()
@@ -153,6 +172,39 @@ impl eframe::App for ConfigEditor {
         egui::CentralPanel::default().show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("MD QC Agent Configuration");
+                ui.add_space(10.0);
+
+                // General Settings Section
+                ui.group(|ui| {
+                    ui.heading("General");
+                    ui.add_space(5.0);
+                    ui.checkbox(&mut self.enable_notifications, "Enable notifications")
+                        .on_hover_text("Show Windows notifications for file detection, processing, and completion");
+                });
+
+                ui.add_space(10.0);
+
+                // Watcher Settings Section
+                ui.group(|ui| {
+                    ui.heading("File Watcher");
+                    ui.add_space(5.0);
+
+                    egui::Grid::new("watcher_grid")
+                        .num_columns(2)
+                        .spacing([10.0, 5.0])
+                        .show(ui, |ui| {
+                            ui.label("Scan interval (seconds):")
+                                .on_hover_text("How often to check for new files");
+                            ui.add(egui::DragValue::new(&mut self.scan_interval_secs).range(5..=300));
+                            ui.end_row();
+
+                            ui.label("Stability window (seconds):")
+                                .on_hover_text("Wait for file to stop changing before processing");
+                            ui.add(egui::DragValue::new(&mut self.stability_window_secs).range(10..=600));
+                            ui.end_row();
+                        });
+                });
+
                 ui.add_space(10.0);
 
                 // Cloud Settings Section
@@ -187,23 +239,34 @@ impl eframe::App for ConfigEditor {
                     ui.heading("Skyline");
                     ui.add_space(5.0);
 
-                    ui.horizontal(|ui| {
-                        ui.label("Path:");
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.skyline_path)
-                                .desired_width(350.0)
-                                .hint_text("Leave empty for auto-discovery"),
-                        );
-                        if ui.button("Browse...").clicked() {
-                            if let Some(path) = rfd::FileDialog::new()
-                                .add_filter("Skyline", &["exe"])
-                                .set_title("Select SkylineCmd.exe")
-                                .pick_file()
-                            {
-                                self.skyline_path = path.display().to_string();
-                            }
-                        }
-                    });
+                    egui::Grid::new("skyline_grid")
+                        .num_columns(2)
+                        .spacing([10.0, 5.0])
+                        .show(ui, |ui| {
+                            ui.label("Path:");
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut self.skyline_path)
+                                        .desired_width(300.0)
+                                        .hint_text("Leave empty for auto-discovery"),
+                                );
+                                if ui.button("Browse...").clicked() {
+                                    if let Some(path) = rfd::FileDialog::new()
+                                        .add_filter("Skyline", &["exe"])
+                                        .set_title("Select SkylineCmd.exe")
+                                        .pick_file()
+                                    {
+                                        self.skyline_path = path.display().to_string();
+                                    }
+                                }
+                            });
+                            ui.end_row();
+
+                            ui.label("Timeout (seconds):")
+                                .on_hover_text("Maximum time to wait for Skyline extraction");
+                            ui.add(egui::DragValue::new(&mut self.skyline_timeout_secs).range(60..=1800));
+                            ui.end_row();
+                        });
                 });
 
                 ui.add_space(10.0);

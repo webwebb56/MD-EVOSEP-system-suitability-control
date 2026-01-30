@@ -1,5 +1,24 @@
 # MD QC Agent Changelog
 
+## v0.5.1
+
+### Features
+
+- **Notifications enabled by default** - users now see file detection, processing, and completion
+- **File detection notification** shows filename and stability wait time
+- **GUI config editor improvements**:
+  - Added "Enable notifications" toggle
+  - Added "Scan interval" setting (how often to check for new files)
+  - Added "Stability window" setting (wait for file to stop changing)
+  - Added "Skyline timeout" setting
+  - Settings are saved to config and take effect on next restart
+
+### Bug Fixes
+
+- Fixed notifications not showing (was disabled by default)
+
+---
+
 ## v0.5.0
 
 ### Features

@@ -34,6 +34,8 @@ pub struct Watcher {
     processed_files: Arc<Mutex<std::collections::HashSet<PathBuf>>>,
     running: Arc<Mutex<bool>>,
     is_network_path: bool,
+    /// Whether to show toast notifications
+    enable_notifications: bool,
 }
 
 impl Watcher {
@@ -42,6 +44,7 @@ impl Watcher {
         instrument: InstrumentConfig,
         config: WatcherConfig,
         ready_tx: mpsc::Sender<TrackedFile>,
+        enable_notifications: bool,
     ) -> Result<Self> {
         let watch_path = PathBuf::from(&instrument.watch_path);
         let is_network_path = Self::detect_network_path(&watch_path);
@@ -62,6 +65,7 @@ impl Watcher {
             processed_files: Arc::new(Mutex::new(std::collections::HashSet::new())),
             running: Arc::new(Mutex::new(false)),
             is_network_path,
+            enable_notifications,
         })
     }
 
@@ -128,6 +132,8 @@ impl Watcher {
             let vendor = self.instrument.vendor;
             let instrument_id = self.instrument.id.clone();
             let running = Arc::clone(&self.running);
+            let enable_notifications = self.enable_notifications;
+            let stability_window = self.config.stability_window_seconds;
 
             std::thread::spawn(move || {
                 if let Err(e) = run_event_watcher(
@@ -137,6 +143,8 @@ impl Watcher {
                     vendor,
                     instrument_id.clone(),
                     running,
+                    enable_notifications,
+                    stability_window,
                 ) {
                     error!(
                         instrument = %instrument_id,
@@ -176,8 +184,10 @@ impl Watcher {
         let file_pattern = self.instrument.file_pattern.clone();
         let vendor = self.instrument.vendor;
         let scan_interval = self.config.scan_interval_seconds;
+        let stability_window = self.config.stability_window_seconds;
         let instrument_id = self.instrument.id.clone();
         let running = Arc::clone(&self.running);
+        let enable_notifications = self.enable_notifications;
 
         tokio::spawn(async move {
             run_scan_loop(
@@ -187,8 +197,10 @@ impl Watcher {
                 file_pattern,
                 vendor,
                 scan_interval,
+                stability_window,
                 instrument_id,
                 running,
+                enable_notifications,
             )
             .await
         });
@@ -231,6 +243,8 @@ fn run_event_watcher(
     vendor: Vendor,
     instrument_id: String,
     running: Arc<Mutex<bool>>,
+    enable_notifications: bool,
+    stability_window_secs: u64,
 ) -> Result<()> {
     let tracked_files_clone = Arc::clone(&tracked_files);
     let processed_files_clone = Arc::clone(&processed_files);
@@ -293,6 +307,11 @@ fn run_event_watcher(
                             vendor,
                         };
 
+                        let file_name = path
+                            .file_name()
+                            .and_then(|f| f.to_str())
+                            .unwrap_or("unknown");
+
                         info!(
                             instrument = %instrument_id_clone,
                             path = %path.display(),
@@ -300,6 +319,15 @@ fn run_event_watcher(
                             source = "event",
                             "File detected via filesystem event"
                         );
+
+                        // Show notification for file detection
+                        if enable_notifications {
+                            crate::notifications::notify_file_detected(
+                                file_name,
+                                &instrument_id_clone,
+                                stability_window_secs,
+                            );
+                        }
 
                         tracked_files_clone
                             .lock()
@@ -344,8 +372,10 @@ async fn run_scan_loop(
     file_pattern: String,
     vendor: Vendor,
     scan_interval_secs: u64,
+    stability_window_secs: u64,
     instrument_id: String,
     running: Arc<Mutex<bool>>,
+    enable_notifications: bool,
 ) {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(scan_interval_secs));
 
@@ -423,6 +453,11 @@ async fn run_scan_loop(
                 vendor,
             };
 
+            let file_name = entry
+                .file_name()
+                .and_then(|f| f.to_str())
+                .unwrap_or("unknown");
+
             info!(
                 instrument = %instrument_id,
                 path = %entry.display(),
@@ -430,6 +465,15 @@ async fn run_scan_loop(
                 source = "scan",
                 "File detected via directory scan"
             );
+
+            // Show notification for file detection
+            if enable_notifications {
+                crate::notifications::notify_file_detected(
+                    file_name,
+                    &instrument_id,
+                    stability_window_secs,
+                );
+            }
 
             tracked_files.lock().unwrap().insert(entry, tracked_file);
         }

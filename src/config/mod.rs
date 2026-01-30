@@ -133,7 +133,7 @@ impl Default for AgentConfig {
         Self {
             agent_id: default_agent_id(),
             log_level: default_log_level(),
-            enable_toast_notifications: false,
+            enable_toast_notifications: true, // Enabled by default for better UX
         }
     }
 }

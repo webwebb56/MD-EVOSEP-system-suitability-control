@@ -27,20 +27,22 @@ fn show_toast(title: &str, body: &str, silent: bool) {
 }
 
 /// Notify when a QC file is detected and queued for processing.
-#[allow(dead_code)] // Will be used when watcher integration is complete
-pub fn notify_file_detected(file_name: &str, instrument: &str) {
+pub fn notify_file_detected(file_name: &str, instrument: &str, stability_window_secs: u64) {
     debug!(file = file_name, instrument, "File detected notification");
 
     #[cfg(windows)]
     {
         let title = "QC File Detected";
-        let body = format!("{}\nInstrument: {}", file_name, instrument);
+        let body = format!(
+            "{}\nWaiting {}s for file to stabilize...",
+            file_name, stability_window_secs
+        );
         show_toast(title, &body, true); // Silent - don't beep for detection
     }
 
     #[cfg(not(windows))]
     {
-        let _ = (file_name, instrument);
+        let _ = (file_name, instrument, stability_window_secs);
     }
 }
 

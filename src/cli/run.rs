@@ -97,7 +97,12 @@ pub async fn run_agent(config: Config, shutdown_rx: &mut mpsc::Receiver<()>) -> 
     // Start watcher for each instrument
     let mut watchers = Vec::new();
     for instrument in &config.instruments {
-        let watcher = Watcher::new(instrument.clone(), config.watcher.clone(), file_tx.clone())?;
+        let watcher = Watcher::new(
+            instrument.clone(),
+            config.watcher.clone(),
+            file_tx.clone(),
+            enable_notifications,
+        )?;
         watchers.push(watcher);
     }
 
