@@ -390,17 +390,19 @@ impl TrayApp {
 
     fn open_config(&self) -> Result<()> {
         // Launch the GUI configuration editor
-        let exe_path = std::env::current_exe()?;
-        let _ = std::process::Command::new("cmd")
-            .args(["/c", &format!("\"{}\" gui", exe_path.display())])
-            .spawn();
+        if let Ok(exe_path) = std::env::current_exe() {
+            let _ = std::process::Command::new("cmd")
+                .args(["/c", &format!("\"{}\" gui", exe_path.display())])
+                .spawn();
+        }
         Ok(())
     }
 
     fn open_logs(&self) -> Result<()> {
-        let log_dir = config::paths::log_dir()?;
-        let _ = std::fs::create_dir_all(&log_dir);
-        open_folder(&log_dir);
+        if let Ok(log_dir) = config::paths::log_dir() {
+            let _ = std::fs::create_dir_all(&log_dir);
+            open_folder(&log_dir);
+        }
         Ok(())
     }
 
@@ -445,19 +447,21 @@ impl TrayApp {
 
     fn run_doctor(&self) -> Result<()> {
         // Run mdqc doctor in a visible console that stays open
-        let exe_path = std::env::current_exe()?;
-        std::process::Command::new("cmd")
-            .args(["/k", &format!("\"{}\" doctor", exe_path.display())])
-            .spawn()?;
+        if let Ok(exe_path) = std::env::current_exe() {
+            let _ = std::process::Command::new("cmd")
+                .args(["/k", &format!("\"{}\" doctor", exe_path.display())])
+                .spawn();
+        }
         Ok(())
     }
 
     fn view_failed_files(&self) -> Result<()> {
         // Run mdqc failed list in a visible console that stays open
-        let exe_path = std::env::current_exe()?;
-        std::process::Command::new("cmd")
-            .args(["/k", &format!("\"{}\" failed list", exe_path.display())])
-            .spawn()?;
+        if let Ok(exe_path) = std::env::current_exe() {
+            let _ = std::process::Command::new("cmd")
+                .args(["/k", &format!("\"{}\" failed list", exe_path.display())])
+                .spawn();
+        }
         Ok(())
     }
 }
