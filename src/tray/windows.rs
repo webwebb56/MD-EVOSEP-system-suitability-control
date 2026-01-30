@@ -29,7 +29,6 @@ mod menu_ids {
     pub const STATUS: &str = "status";
     pub const HEALTH_STATUS: &str = "health_status";
     pub const INSTRUMENT_COUNT: &str = "instrument_count";
-    pub const FAILED_FILES: &str = "failed_files";
     pub const OPEN_CONFIG: &str = "open_config";
     pub const OPEN_LOGS: &str = "open_logs";
     pub const OPEN_TEMPLATE: &str = "open_template";
@@ -282,16 +281,6 @@ impl TrayApp {
         let logs_item = MenuItem::with_id(menu_ids::OPEN_LOGS, "View Logs...", true, None);
         menu.append(&logs_item)?;
 
-        // Failed files (show count if any)
-        let failed_count = crate::failed_files::FailedFiles::new().count();
-        let failed_text = if failed_count > 0 {
-            format!("View Failed Files ({})...", failed_count)
-        } else {
-            "View Failed Files...".to_string()
-        };
-        let failed_item = MenuItem::with_id(menu_ids::FAILED_FILES, &failed_text, true, None);
-        menu.append(&failed_item)?;
-
         menu.append(&PredefinedMenuItem::separator())?;
 
         // Diagnostics
@@ -367,7 +356,6 @@ impl TrayApp {
             menu_ids::OPEN_TEMPLATE => self.open_template(),
             menu_ids::OPEN_DATA_FOLDER => self.open_data_folder(),
             menu_ids::DOCTOR => self.run_doctor(),
-            menu_ids::FAILED_FILES => self.view_failed_files(),
             menu_ids::CHECK_UPDATES => {
                 open_url(RELEASES_URL);
                 Ok(())
@@ -391,8 +379,8 @@ impl TrayApp {
     fn open_config(&self) -> Result<()> {
         // Launch the GUI configuration editor
         if let Ok(exe_path) = std::env::current_exe() {
-            let _ = std::process::Command::new("cmd")
-                .args(["/c", &format!("\"{}\" gui", exe_path.display())])
+            let _ = std::process::Command::new(&exe_path)
+                .arg("gui")
                 .spawn();
         }
         Ok(())
@@ -401,7 +389,7 @@ impl TrayApp {
     fn open_logs(&self) -> Result<()> {
         if let Ok(log_dir) = config::paths::log_dir() {
             let _ = std::fs::create_dir_all(&log_dir);
-            open_folder(&log_dir);
+            let _ = std::process::Command::new("explorer").arg(&log_dir).spawn();
         }
         Ok(())
     }
@@ -413,17 +401,17 @@ impl TrayApp {
                 if !instrument.template.is_empty() {
                     let template_path = std::path::Path::new(&instrument.template);
                     if template_path.exists() {
-                        open_folder(template_path);
+                        let _ = std::process::Command::new("explorer").arg(template_path).spawn();
                         return Ok(());
                     }
                 }
             }
         }
 
-        // Fallback: open methods directory (where QC_Method.sky should be)
+        // Fallback: open methods directory
         let methods_dir = config::paths::data_dir().join("methods");
         let _ = std::fs::create_dir_all(&methods_dir);
-        open_folder(&methods_dir);
+        let _ = std::process::Command::new("explorer").arg(&methods_dir).spawn();
         Ok(())
     }
 
@@ -433,7 +421,7 @@ impl TrayApp {
             if let Some(instrument) = cfg.instruments.first() {
                 let watch_path = std::path::Path::new(&instrument.watch_path);
                 if watch_path.exists() {
-                    open_folder(watch_path);
+                    let _ = std::process::Command::new("explorer").arg(watch_path).spawn();
                     return Ok(());
                 }
             }
@@ -441,29 +429,21 @@ impl TrayApp {
 
         // Fallback: open user's documents
         let docs_path = dirs::document_dir().unwrap_or_else(|| std::path::PathBuf::from("C:\\"));
-        open_folder(&docs_path);
+        let _ = std::process::Command::new("explorer").arg(&docs_path).spawn();
         Ok(())
     }
 
     fn run_doctor(&self) -> Result<()> {
-        // Run mdqc doctor in a visible console that stays open
+        // Run mdqc doctor in a new console window
         if let Ok(exe_path) = std::env::current_exe() {
-            let _ = std::process::Command::new("cmd")
-                .args(["/k", &format!("\"{}\" doctor", exe_path.display())])
+            let _ = std::process::Command::new(&exe_path)
+                .arg("doctor")
+                .creation_flags(0x00000010) // CREATE_NEW_CONSOLE
                 .spawn();
         }
         Ok(())
     }
 
-    fn view_failed_files(&self) -> Result<()> {
-        // Run mdqc failed list in a visible console that stays open
-        if let Ok(exe_path) = std::env::current_exe() {
-            let _ = std::process::Command::new("cmd")
-                .args(["/k", &format!("\"{}\" failed list", exe_path.display())])
-                .spawn();
-        }
-        Ok(())
-    }
 }
 
 impl ApplicationHandler for TrayApp {
@@ -765,13 +745,6 @@ fn shell_open(path: &str) -> Result<()> {
 /// Open URL in default browser
 fn open_url(url: &str) {
     let _ = shell_open(url);
-}
-
-/// Simple folder opener that can't fail - just runs explorer.exe
-fn open_folder(path: &std::path::Path) {
-    let _ = std::process::Command::new("explorer.exe")
-        .arg(path)
-        .spawn();
 }
 
 /// Ensure a Start Menu shortcut exists with the correct AppUserModelID.
