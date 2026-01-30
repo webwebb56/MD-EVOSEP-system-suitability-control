@@ -377,9 +377,9 @@ impl TrayApp {
     }
 
     fn open_config(&self) -> Result<()> {
-        // Launch the GUI configuration editor
+        // Launch the GUI configuration editor using ShellExecuteW
         if let Ok(exe_path) = std::env::current_exe() {
-            let _ = std::process::Command::new(&exe_path).arg("gui").spawn();
+            shell_execute_with_args(&exe_path.to_string_lossy(), "gui")?;
         }
         Ok(())
     }
@@ -387,7 +387,7 @@ impl TrayApp {
     fn open_logs(&self) -> Result<()> {
         if let Ok(log_dir) = config::paths::log_dir() {
             let _ = std::fs::create_dir_all(&log_dir);
-            let _ = std::process::Command::new("explorer").arg(&log_dir).spawn();
+            shell_open(&log_dir.to_string_lossy())?;
         }
         Ok(())
     }
@@ -399,9 +399,7 @@ impl TrayApp {
                 if !instrument.template.is_empty() {
                     let template_path = std::path::Path::new(&instrument.template);
                     if template_path.exists() {
-                        let _ = std::process::Command::new("explorer")
-                            .arg(template_path)
-                            .spawn();
+                        shell_open(&template_path.to_string_lossy())?;
                         return Ok(());
                     }
                 }
@@ -411,9 +409,7 @@ impl TrayApp {
         // Fallback: open methods directory
         let methods_dir = config::paths::data_dir().join("methods");
         let _ = std::fs::create_dir_all(&methods_dir);
-        let _ = std::process::Command::new("explorer")
-            .arg(&methods_dir)
-            .spawn();
+        shell_open(&methods_dir.to_string_lossy())?;
         Ok(())
     }
 
@@ -423,9 +419,7 @@ impl TrayApp {
             if let Some(instrument) = cfg.instruments.first() {
                 let watch_path = std::path::Path::new(&instrument.watch_path);
                 if watch_path.exists() {
-                    let _ = std::process::Command::new("explorer")
-                        .arg(watch_path)
-                        .spawn();
+                    shell_open(&watch_path.to_string_lossy())?;
                     return Ok(());
                 }
             }
@@ -433,19 +427,14 @@ impl TrayApp {
 
         // Fallback: open user's documents
         let docs_path = dirs::document_dir().unwrap_or_else(|| std::path::PathBuf::from("C:\\"));
-        let _ = std::process::Command::new("explorer")
-            .arg(&docs_path)
-            .spawn();
+        shell_open(&docs_path.to_string_lossy())?;
         Ok(())
     }
 
     fn run_doctor(&self) -> Result<()> {
-        // Run mdqc doctor in a new console window
+        // Run mdqc doctor in a new console window using ShellExecuteW
         if let Ok(exe_path) = std::env::current_exe() {
-            let _ = std::process::Command::new(&exe_path)
-                .arg("doctor")
-                .creation_flags(0x00000010) // CREATE_NEW_CONSOLE
-                .spawn();
+            shell_execute_with_args(&exe_path.to_string_lossy(), "doctor")?;
         }
         Ok(())
     }
@@ -743,6 +732,41 @@ fn shell_open(path: &str) -> Result<()> {
         Err(anyhow::anyhow!(
             "ShellExecute failed with code {}",
             result as usize
+        ))
+    }
+}
+
+/// Execute a program with arguments using ShellExecuteW.
+/// This properly handles launching executables from a GUI context.
+fn shell_execute_with_args(exe_path: &str, args: &str) -> Result<()> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+    use std::ptr::null;
+
+    let exe_wide: Vec<u16> = OsStr::new(exe_path).encode_wide().chain(Some(0)).collect();
+    let args_wide: Vec<u16> = OsStr::new(args).encode_wide().chain(Some(0)).collect();
+    let operation: Vec<u16> = OsStr::new("open").encode_wide().chain(Some(0)).collect();
+
+    let result = unsafe {
+        windows_sys::Win32::UI::Shell::ShellExecuteW(
+            0,                  // hwnd
+            operation.as_ptr(), // lpOperation ("open")
+            exe_wide.as_ptr(),  // lpFile (the executable)
+            args_wide.as_ptr(), // lpParameters (arguments)
+            null(),             // lpDirectory
+            1,                  // nShowCmd (SW_SHOWNORMAL = 1)
+        )
+    };
+
+    // ShellExecuteW returns > 32 on success
+    if result as usize > 32 {
+        Ok(())
+    } else {
+        Err(anyhow::anyhow!(
+            "ShellExecute failed with code {} for '{} {}'",
+            result as usize,
+            exe_path,
+            args
         ))
     }
 }

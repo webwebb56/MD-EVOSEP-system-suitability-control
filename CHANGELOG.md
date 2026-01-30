@@ -1,5 +1,17 @@
 # MD QC Agent Changelog
 
+## v0.4.9
+
+### Bug Fixes
+
+- **Fixed: Tray menu items not executing**
+  - All menu handlers now use ShellExecuteW API exclusively
+  - Added `shell_execute_with_args()` for launching exe with arguments
+  - Replaced all `std::process::Command` calls in menu handlers
+  - GUI config, logs, templates, watch folder, and diagnostics all now work reliably
+
+---
+
 ## v0.4.8
 
 ### Features
