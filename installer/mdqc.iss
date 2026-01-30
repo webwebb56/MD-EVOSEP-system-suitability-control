@@ -2,7 +2,7 @@
 ; https://jrsoftware.org/isinfo.php
 
 #define MyAppName "MD QC Agent"
-#define MyAppVersion "0.4.5"
+#define MyAppVersion "0.5.5"
 #define MyAppPublisher "Mass Dynamics"
 #define MyAppURL "https://massdynamics.com"
 #define MyAppExeName "mdqc.exe"
@@ -64,11 +64,13 @@ Source: "..\assets\icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "config.template.toml"; DestDir: "{app}"; DestName: "config.template.toml"; Flags: ignoreversion
 
 [Dirs]
-; Create config and data directories
-Name: "{commonappdata}\MassDynamics\QC"
-Name: "{commonappdata}\MassDynamics\QC\templates"
-Name: "{commonappdata}\MassDynamics\QC\logs"
-Name: "{commonappdata}\MassDynamics\QC\spool"
+; Create config and data directories with user write permissions
+; The "users-modify" permission allows standard users to write config files
+Name: "{commonappdata}\MassDynamics"; Permissions: users-modify
+Name: "{commonappdata}\MassDynamics\QC"; Permissions: users-modify
+Name: "{commonappdata}\MassDynamics\QC\templates"; Permissions: users-modify
+Name: "{commonappdata}\MassDynamics\QC\logs"; Permissions: users-modify
+Name: "{commonappdata}\MassDynamics\QC\spool"; Permissions: users-modify
 
 [Icons]
 ; Start Menu

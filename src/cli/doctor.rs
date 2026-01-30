@@ -219,6 +219,20 @@ pub async fn run() -> Result<()> {
         }
     }
 
+    // Windows-specific checks
+    #[cfg(windows)]
+    {
+        println!();
+        println!("{}Windows Environment{}", color::BOLD, color::RESET);
+        println!("{}", "-".repeat(20));
+
+        let windows_checks = check_windows_environment();
+        for check in &windows_checks {
+            // Windows checks are mostly warnings, not blockers
+            check.print();
+        }
+    }
+
     // Summary
     println!();
     if has_errors {
@@ -567,4 +581,140 @@ fn check_spool(_config: &Config) -> Vec<CheckResult> {
     }
 
     results
+}
+
+/// Check Windows-specific environment settings that could cause issues.
+#[cfg(windows)]
+fn check_windows_environment() -> Vec<CheckResult> {
+    let mut results = Vec::new();
+
+    // Check Windows version
+    let version_info = get_windows_version();
+    results.push(CheckResult::ok_with_detail("Windows version", version_info));
+
+    // Check if Start Menu shortcut exists (needed for notifications)
+    let shortcut_path = std::env::var("APPDATA")
+        .map(|appdata| {
+            std::path::PathBuf::from(appdata)
+                .join("Microsoft")
+                .join("Windows")
+                .join("Start Menu")
+                .join("Programs")
+                .join("MD QC Agent.lnk")
+        })
+        .ok();
+
+    if let Some(ref path) = shortcut_path {
+        if path.exists() {
+            results.push(CheckResult::ok("Start Menu shortcut"));
+        } else {
+            results.push(CheckResult::warning(
+                "Start Menu shortcut",
+                "missing (notifications may show as 'PowerShell')",
+            ));
+        }
+    }
+
+    // Check if running with admin rights (usually not needed, but good to know)
+    let is_admin = is_running_as_admin();
+    if is_admin {
+        results.push(CheckResult::ok_with_detail("Running as", "Administrator"));
+    } else {
+        results.push(CheckResult::ok_with_detail("Running as", "Standard user"));
+    }
+
+    // Check long path support
+    if long_paths_enabled() {
+        results.push(CheckResult::ok("Long path support"));
+    } else {
+        results.push(CheckResult::warning(
+            "Long path support",
+            "disabled (paths >260 chars may fail)",
+        ));
+    }
+
+    // Check if running from Program Files (recommended) or elsewhere
+    if let Ok(exe_path) = std::env::current_exe() {
+        let exe_str = exe_path.display().to_string().to_lowercase();
+        if exe_str.contains("program files") {
+            results.push(CheckResult::ok_with_detail(
+                "Install location",
+                "Program Files (recommended)",
+            ));
+        } else if exe_str.contains("temp") || exe_str.contains("downloads") {
+            results.push(CheckResult::warning(
+                "Install location",
+                "temporary folder (may cause issues)",
+            ));
+        } else {
+            results.push(CheckResult::ok_with_detail(
+                "Install location",
+                exe_path
+                    .parent()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default(),
+            ));
+        }
+    }
+
+    results
+}
+
+/// Get Windows version info.
+#[cfg(windows)]
+fn get_windows_version() -> String {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    if let Ok(key) = hklm.open_subkey(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion") {
+        let product_name: String = key.get_value("ProductName").unwrap_or_default();
+        let build: String = key.get_value("CurrentBuildNumber").unwrap_or_default();
+        let display_version: String = key.get_value("DisplayVersion").unwrap_or_default();
+
+        if !product_name.is_empty() {
+            if !display_version.is_empty() {
+                format!("{} {} (Build {})", product_name, display_version, build)
+            } else {
+                format!("{} (Build {})", product_name, build)
+            }
+        } else {
+            "Unknown".to_string()
+        }
+    } else {
+        "Unknown".to_string()
+    }
+}
+
+/// Check if running with admin privileges (simplified check).
+#[cfg(windows)]
+fn is_running_as_admin() -> bool {
+    // Simple check: try to read a protected registry key
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    // This key requires admin to write to (we just read, but it's a hint)
+    RegKey::predef(HKEY_LOCAL_MACHINE)
+        .open_subkey(r"SYSTEM\CurrentControlSet\Control")
+        .map(|key| {
+            // If we can read CurrentUser, we have some privileges
+            // Try to check if we have write access by checking key metadata
+            key.enum_keys().next().is_some()
+        })
+        .unwrap_or(false)
+}
+
+/// Check if Windows long path support is enabled.
+#[cfg(windows)]
+fn long_paths_enabled() -> bool {
+    use winreg::enums::*;
+    use winreg::RegKey;
+
+    let hklm = RegKey::predef(HKEY_LOCAL_MACHINE);
+    if let Ok(key) = hklm.open_subkey(r"SYSTEM\CurrentControlSet\Control\FileSystem") {
+        let value: u32 = key.get_value("LongPathsEnabled").unwrap_or(0);
+        value == 1
+    } else {
+        false
+    }
 }

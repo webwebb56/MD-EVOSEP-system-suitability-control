@@ -1,12 +1,34 @@
 # MD QC Agent Changelog
 
-## v0.5.3
+## v0.5.5
+
+### Bug Fixes
+
+- **Fixed: Skyline extraction failing with "os error 50"** - Reverted CREATE_NO_WINDOW flag which was incompatible with ClickOnce applications like Skyline. The brief CMD window flash is acceptable as a trade-off for reliable extraction.
+
+---
+
+## v0.5.4
 
 ### Bug Fixes
 
 - **Fixed: Notifications not showing** - serde was using `bool::default()` (false) instead of our custom default (true)
-- **Fixed: CMD window flashing** - Skyline now runs with `CREATE_NO_WINDOW` flag to prevent console window flash
+- ~~**Fixed: CMD window flashing**~~ - (Reverted in v0.5.5 - caused Skyline failures)
 - Added `enable_toast_notifications = true` to config template for visibility
+
+### Improvements
+
+- **Enhanced diagnostics (`mdqc doctor`)** - Added Windows Environment section:
+  - Windows version detection
+  - Start Menu shortcut check (required for proper notifications)
+  - Long path support check
+  - Install location validation
+
+---
+
+## v0.5.3
+
+(Superseded by v0.5.4)
 
 ---
 
