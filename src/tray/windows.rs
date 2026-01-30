@@ -27,6 +27,7 @@ const RELEASES_URL: &str =
 /// Menu item IDs
 mod menu_ids {
     pub const STATUS: &str = "status";
+    pub const WATCHER_STATUS: &str = "watcher_status";
     pub const HEALTH_STATUS: &str = "health_status";
     pub const INSTRUMENT_COUNT: &str = "instrument_count";
     pub const OPEN_CONFIG: &str = "open_config";
@@ -223,7 +224,7 @@ impl TrayApp {
         }
     }
 
-    fn create_menu(&self) -> Result<Menu> {
+    fn create_menu(&self, watcher_running: bool) -> Result<Menu> {
         let menu = Menu::new();
 
         // Status item (disabled, just shows info)
@@ -236,18 +237,28 @@ impl TrayApp {
         );
         menu.append(&status_item)?;
 
+        // Watcher status (green circle = running, red = not)
+        let watcher_text = if watcher_running {
+            "● Watcher: Running".to_string()
+        } else {
+            "○ Watcher: Not running".to_string()
+        };
+        let watcher_item =
+            MenuItem::with_id(menu_ids::WATCHER_STATUS, &watcher_text, false, None);
+        menu.append(&watcher_item)?;
+
         // Health status from startup check
         let health_text = match &self.health_status {
             Some(health) if health.is_healthy && health.warnings.is_empty() => {
-                "Status: Ready".to_string()
+                "Config: OK".to_string()
             }
             Some(health) if health.is_healthy => {
-                format!("Status: {} warning(s)", health.warnings.len())
+                format!("Config: {} warning(s)", health.warnings.len())
             }
             Some(health) => {
-                format!("Status: {} error(s)", health.errors.len())
+                format!("Config: {} error(s)", health.errors.len())
             }
-            None => "Status: Checking...".to_string(),
+            None => "Config: Checking...".to_string(),
         };
         let health_item = MenuItem::with_id(menu_ids::HEALTH_STATUS, &health_text, false, None);
         menu.append(&health_item)?;
@@ -328,7 +339,7 @@ impl TrayApp {
         }
     }
 
-    fn create_icon(&self) -> Result<tray_icon::Icon> {
+    fn create_icon(&self, watcher_running: bool) -> Result<tray_icon::Icon> {
         // Load the embedded PNG icon (Mass Dynamics logo)
         const ICON_PNG: &[u8] = include_bytes!("../../assets/icon.png");
 
@@ -340,7 +351,36 @@ impl TrayApp {
         let img = img.resize_exact(32, 32, image::imageops::FilterType::Lanczos3);
 
         // Convert to RGBA
-        let rgba = img.to_rgba8();
+        let mut rgba = img.to_rgba8();
+
+        // Add a status indicator dot in the bottom-right corner
+        let dot_color: [u8; 4] = if watcher_running {
+            [0, 200, 0, 255] // Green for running
+        } else {
+            [200, 0, 0, 255] // Red for not running
+        };
+
+        // Draw a 8x8 dot in the bottom-right corner (with 1px padding)
+        let dot_size = 8u32;
+        let start_x = 32 - dot_size - 1;
+        let start_y = 32 - dot_size - 1;
+
+        for y in start_y..(start_y + dot_size) {
+            for x in start_x..(start_x + dot_size) {
+                // Make it a circle by checking distance from center
+                let cx = start_x + dot_size / 2;
+                let cy = start_y + dot_size / 2;
+                let dx = x as i32 - cx as i32;
+                let dy = y as i32 - cy as i32;
+                let dist_sq = dx * dx + dy * dy;
+                let radius_sq = (dot_size as i32 / 2) * (dot_size as i32 / 2);
+
+                if dist_sq <= radius_sq {
+                    rgba.put_pixel(x, y, image::Rgba(dot_color));
+                }
+            }
+        }
+
         let (width, height) = rgba.dimensions();
         let raw_data = rgba.into_raw();
 
@@ -482,7 +522,10 @@ impl ApplicationHandler for TrayApp {
                 show_message_box("MD QC Agent - Setup Required", &error_msg, true);
             }
 
-            let menu = match self.create_menu() {
+            // Check if watcher is running (watcher_shutdown being Some means it was started)
+            let watcher_running = self.watcher_shutdown.is_some();
+
+            let menu = match self.create_menu(watcher_running) {
                 Ok(m) => m,
                 Err(e) => {
                     let msg = format!("Failed to create tray menu:\n\n{}", e);
@@ -494,7 +537,7 @@ impl ApplicationHandler for TrayApp {
                 }
             };
 
-            let icon = match self.create_icon() {
+            let icon = match self.create_icon(watcher_running) {
                 Ok(i) => i,
                 Err(e) => {
                     let msg = format!("Failed to load tray icon:\n\n{}", e);
@@ -506,11 +549,15 @@ impl ApplicationHandler for TrayApp {
                 }
             };
 
-            // Set tooltip based on health status
-            let tooltip = match &self.health_status {
-                Some(h) if h.is_healthy => "MD QC Agent - Ready",
-                Some(_) => "MD QC Agent - Issues detected (right-click for details)",
-                None => "MD QC Agent",
+            // Set tooltip based on watcher and health status
+            let tooltip = if watcher_running {
+                "MD QC Agent - Watching for files"
+            } else {
+                match &self.health_status {
+                    Some(h) if h.is_healthy => "MD QC Agent - Not watching (no instruments configured)",
+                    Some(_) => "MD QC Agent - Not watching (configuration issues)",
+                    None => "MD QC Agent - Not running",
+                }
             };
 
             let tray_icon = TrayIconBuilder::new()

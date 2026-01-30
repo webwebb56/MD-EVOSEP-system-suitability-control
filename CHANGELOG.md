@@ -1,5 +1,17 @@
 # MD QC Agent Changelog
 
+## v0.5.2
+
+### Features
+
+- **Visual watcher status indicator**:
+  - Tray icon shows green dot when watcher is running, red dot when not
+  - Menu shows "● Watcher: Running" or "○ Watcher: Not running"
+  - Tooltip shows "Watching for files" or explains why not running
+- Clearer status labels in menu (Config: OK vs Status: Ready)
+
+---
+
 ## v0.5.1
 
 ### Features
