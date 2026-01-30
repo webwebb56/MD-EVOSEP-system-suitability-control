@@ -243,8 +243,7 @@ impl TrayApp {
         } else {
             "○ Watcher: Not running".to_string()
         };
-        let watcher_item =
-            MenuItem::with_id(menu_ids::WATCHER_STATUS, &watcher_text, false, None);
+        let watcher_item = MenuItem::with_id(menu_ids::WATCHER_STATUS, &watcher_text, false, None);
         menu.append(&watcher_item)?;
 
         // Health status from startup check
@@ -554,7 +553,9 @@ impl ApplicationHandler for TrayApp {
                 "MD QC Agent - Watching for files"
             } else {
                 match &self.health_status {
-                    Some(h) if h.is_healthy => "MD QC Agent - Not watching (no instruments configured)",
+                    Some(h) if h.is_healthy => {
+                        "MD QC Agent - Not watching (no instruments configured)"
+                    }
                     Some(_) => "MD QC Agent - Not watching (configuration issues)",
                     None => "MD QC Agent - Not running",
                 }
