@@ -1,5 +1,17 @@
 # MD QC Agent Changelog
 
+## v0.5.0
+
+### Features
+
+- **Tray now auto-starts the file watcher** - no need to run `mdqc run` separately
+  - Tray icon = the app. Launch tray, files are watched automatically
+  - Watcher runs in background thread (same process)
+  - Clean shutdown: when tray exits, watcher stops (no orphan processes)
+  - If no instruments configured, watcher doesn't start (with message)
+
+---
+
 ## v0.4.9
 
 ### Bug Fixes

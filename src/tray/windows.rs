@@ -96,14 +96,17 @@ struct TrayApp {
     tray_icon: Option<TrayIcon>,
     running: Arc<AtomicBool>,
     health_status: Option<HealthCheckResult>,
+    /// Shutdown sender for the background watcher
+    watcher_shutdown: Option<tokio::sync::mpsc::Sender<()>>,
 }
 
 impl TrayApp {
-    fn new() -> Self {
+    fn new(watcher_shutdown: Option<tokio::sync::mpsc::Sender<()>>) -> Self {
         Self {
             tray_icon: None,
             running: Arc::new(AtomicBool::new(true)),
             health_status: None,
+            watcher_shutdown,
         }
     }
 
@@ -361,6 +364,10 @@ impl TrayApp {
                 Ok(())
             }
             menu_ids::EXIT => {
+                // Signal the background watcher to stop
+                if let Some(ref tx) = self.watcher_shutdown {
+                    let _ = tx.blocking_send(());
+                }
                 self.running.store(false, Ordering::SeqCst);
                 Ok(())
             }
@@ -977,10 +984,50 @@ async fn run_tray_inner() -> Result<()> {
     println!("Starting MD QC Agent system tray...");
     println!("Right-click the tray icon for options.");
 
+    // Start the file watcher in a background thread
+    // When this process exits, the thread dies automatically (no orphans)
+    let watcher_shutdown = start_background_watcher();
+
     let event_loop = EventLoop::new()?;
-    let mut app = TrayApp::new();
+    let mut app = TrayApp::new(watcher_shutdown);
 
     event_loop.run_app(&mut app)?;
 
     Ok(())
+}
+
+/// Start the file watcher in a background thread.
+/// Returns a shutdown sender to stop the watcher gracefully.
+fn start_background_watcher() -> Option<tokio::sync::mpsc::Sender<()>> {
+    // Try to load config - if it fails, don't start the watcher
+    let config = match config::Config::load() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Cannot start watcher: config error: {}", e);
+            return None;
+        }
+    };
+
+    // Check if there are instruments configured
+    if config.instruments.is_empty() {
+        println!("No instruments configured - watcher not started");
+        return None;
+    }
+
+    // Create shutdown channel
+    let (shutdown_tx, mut shutdown_rx) = tokio::sync::mpsc::channel::<()>(1);
+
+    // Spawn background thread with its own tokio runtime
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create tokio runtime");
+        rt.block_on(async {
+            println!("Background watcher started");
+            if let Err(e) = crate::cli::run::run_agent(config, &mut shutdown_rx).await {
+                eprintln!("Watcher error: {}", e);
+            }
+            println!("Background watcher stopped");
+        });
+    });
+
+    Some(shutdown_tx)
 }
