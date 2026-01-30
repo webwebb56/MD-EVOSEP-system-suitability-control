@@ -113,15 +113,18 @@ impl Extractor {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
-        // Set process priority on Windows
+        // Set process priority and hide window on Windows
         #[cfg(windows)]
         {
             #[allow(unused_imports)]
             use std::os::windows::process::CommandExt;
+            // CREATE_NO_WINDOW = 0x08000000 (prevents CMD window flash)
             // BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
+            let mut flags = 0x08000000u32; // Always hide window
             if self.config.process_priority == "below_normal" {
-                cmd.creation_flags(0x00004000);
+                flags |= 0x00004000;
             }
+            cmd.creation_flags(flags);
         }
 
         debug!(command = ?cmd, "Executing Skyline");

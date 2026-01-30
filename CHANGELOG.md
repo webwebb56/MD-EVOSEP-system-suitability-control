@@ -1,5 +1,15 @@
 # MD QC Agent Changelog
 
+## v0.5.3
+
+### Bug Fixes
+
+- **Fixed: Notifications not showing** - serde was using `bool::default()` (false) instead of our custom default (true)
+- **Fixed: CMD window flashing** - Skyline now runs with `CREATE_NO_WINDOW` flag to prevent console window flash
+- Added `enable_toast_notifications = true` to config template for visibility
+
+---
+
 ## v0.5.2
 
 ### Features

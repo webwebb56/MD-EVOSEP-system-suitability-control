@@ -11,6 +11,9 @@ agent_id = "auto"
 # Log level: error, warn, info, debug
 log_level = "info"
 
+# Show Windows notifications for file detection, processing, and completion
+enable_toast_notifications = true
+
 [cloud]
 # Mass Dynamics API endpoint
 endpoint = "https://qc.massdynamics.com/api/"

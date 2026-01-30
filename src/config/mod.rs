@@ -115,8 +115,8 @@ pub struct AgentConfig {
     #[serde(default = "default_log_level")]
     pub log_level: String,
 
-    /// Enable Windows toast notifications for critical errors
-    #[serde(default)]
+    /// Enable Windows toast notifications
+    #[serde(default = "default_notifications_enabled")]
     pub enable_toast_notifications: bool,
 }
 
@@ -126,6 +126,10 @@ fn default_agent_id() -> String {
 
 fn default_log_level() -> String {
     "info".to_string()
+}
+
+fn default_notifications_enabled() -> bool {
+    true // Enabled by default for better UX
 }
 
 impl Default for AgentConfig {
