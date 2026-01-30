@@ -379,9 +379,7 @@ impl TrayApp {
     fn open_config(&self) -> Result<()> {
         // Launch the GUI configuration editor
         if let Ok(exe_path) = std::env::current_exe() {
-            let _ = std::process::Command::new(&exe_path)
-                .arg("gui")
-                .spawn();
+            let _ = std::process::Command::new(&exe_path).arg("gui").spawn();
         }
         Ok(())
     }
@@ -401,7 +399,9 @@ impl TrayApp {
                 if !instrument.template.is_empty() {
                     let template_path = std::path::Path::new(&instrument.template);
                     if template_path.exists() {
-                        let _ = std::process::Command::new("explorer").arg(template_path).spawn();
+                        let _ = std::process::Command::new("explorer")
+                            .arg(template_path)
+                            .spawn();
                         return Ok(());
                     }
                 }
@@ -411,7 +411,9 @@ impl TrayApp {
         // Fallback: open methods directory
         let methods_dir = config::paths::data_dir().join("methods");
         let _ = std::fs::create_dir_all(&methods_dir);
-        let _ = std::process::Command::new("explorer").arg(&methods_dir).spawn();
+        let _ = std::process::Command::new("explorer")
+            .arg(&methods_dir)
+            .spawn();
         Ok(())
     }
 
@@ -421,7 +423,9 @@ impl TrayApp {
             if let Some(instrument) = cfg.instruments.first() {
                 let watch_path = std::path::Path::new(&instrument.watch_path);
                 if watch_path.exists() {
-                    let _ = std::process::Command::new("explorer").arg(watch_path).spawn();
+                    let _ = std::process::Command::new("explorer")
+                        .arg(watch_path)
+                        .spawn();
                     return Ok(());
                 }
             }
@@ -429,7 +433,9 @@ impl TrayApp {
 
         // Fallback: open user's documents
         let docs_path = dirs::document_dir().unwrap_or_else(|| std::path::PathBuf::from("C:\\"));
-        let _ = std::process::Command::new("explorer").arg(&docs_path).spawn();
+        let _ = std::process::Command::new("explorer")
+            .arg(&docs_path)
+            .spawn();
         Ok(())
     }
 
@@ -443,7 +449,6 @@ impl TrayApp {
         }
         Ok(())
     }
-
 }
 
 impl ApplicationHandler for TrayApp {
